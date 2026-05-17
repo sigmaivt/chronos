@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>Хронос — Hi-fi V4</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,800;0,900;1,400;1,700&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    background: #04040a;
+    color: #f5f3ed;
+    font-family: "DM Sans", system-ui, sans-serif;
+    min-width: 1280px;
+    overflow-x: hidden;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  body { -webkit-font-smoothing: antialiased; }
+  ::selection { background: rgba(245,243,237,0.18); }
+
+  /* Back link to wireframes */
+  .back-link {
+    position: fixed; bottom: 22px; left: 60px; z-index: 50;
+    font-family: "JetBrains Mono", monospace; font-size: 10px;
+    color: rgba(245,243,237,0.45); letter-spacing: 2px;
+    text-transform: uppercase; text-decoration: none;
+    transition: color 200ms;
+  }
+  .back-link:hover { color: #f5f3ed; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+<a class="back-link" href="Хронос — Wireframes.html">← к вайрфреймам</a>
+
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="cube.jsx"></script>
+<script type="text/babel" src="hifi-v4.jsx"></script>
+
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "epoch": "contemporary",
+  "assembled": false
+}/*EDITMODE-END*/;
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  return (
+    <>
+      <HiFiHero t={t} setTweak={setTweak} />
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Состояние" />
+        <TweakToggle
+          label="Собранный кубик"
+          hint="все грани = цвет выбранной эпохи"
+          value={t.assembled}
+          onChange={(v) => setTweak('assembled', v)}
+        />
+        <TweakSection label="Эпоха" />
+        <TweakSelect
+          label="Активная эпоха"
+          value={t.epoch}
+          options={EPOCH_ORDER.map((id) => ({ value: id, label: EPOCHS[id].ru }))}
+          onChange={(v) => setTweak('epoch', v)}
+        />
+        <TweakRow label="Палитра">
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {EPOCH_ORDER.map((id) => {
+              const e = EPOCHS[id];
+              const on = id === t.epoch;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setTweak('epoch', id)}
+                  title={e.ru}
+                  style={{
+                    display: 'flex', cursor: 'pointer',
+                    border: on ? '2px solid #fff' : '2px solid transparent',
+                    outline: on ? '1px solid rgba(0,0,0,.5)' : 'none',
+                    borderRadius: 4, padding: 0, overflow: 'hidden',
+                    background: 'transparent',
+                  }}
+                >
+                  {e.colors.slice(0, 4).map((c, i) => (
+                    <span key={i} style={{
+                      width: 14, height: 22, background: c, display: 'block',
+                    }} />
+                  ))}
+                </button>
+              );
+            })}
+          </div>
+        </TweakRow>
+      </TweaksPanel>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

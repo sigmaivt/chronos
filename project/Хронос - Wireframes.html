@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>Хронос — Wireframes</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@400;700&family=Patrick+Hand&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; background: #ece5d4; }
+  body { font-family: "Patrick Hand", cursive; color: #1f1a14; }
+  *, *::before, *::after { box-sizing: border-box; }
+  /* faint paper texture under the canvas */
+  .paper-under {
+    position: fixed; inset: 0; z-index: -1;
+    background:
+      radial-gradient(circle at 20% 30%, rgba(0,0,0,0.04), transparent 50%),
+      radial-gradient(circle at 80% 70%, rgba(0,0,0,0.04), transparent 50%),
+      #ece5d4;
+  }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div class="paper-under"></div>
+<div id="root"></div>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+<script type="text/babel" src="cube.jsx"></script>
+<script type="text/babel" src="variants.jsx"></script>
+<script type="text/babel" src="storyboard.jsx"></script>
+
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "epoch": "contemporary",
+  "density": "comfy",
+  "altNav": false,
+  "rotation": -16,
+  "spin": false
+}/*EDITMODE-END*/;
+
+// Auto-spin: when on, slowly oscillate the rotation value so the parallax
+// breathes without user input.
+function useAutoSpin(enabled, set) {
+  React.useEffect(() => {
+    if (!enabled) return;
+    let raf, t0;
+    const tick = (ts) => {
+      if (!t0) t0 = ts;
+      const dt = (ts - t0) / 1000;
+      set(Math.round(Math.sin(dt * 0.6) * 28));
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [enabled, set]);
+}
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  useAutoSpin(t.spin, (v) => setTweak('rotation', v));
+
+  return (
+    <>
+      <DesignCanvas
+        title="Хронос — Hero, 3 направления"
+        subtitle="wireframe · sketch + epoch accents · desktop only"
+      >
+        <DCSection
+          id="hero"
+          title="Hero · кубик Рубика как навигация"
+          subtitle="Три композиции одной идеи. Тwееки слева → перекрашивают все три."
+        >
+          <DCArtboard id="v3" label="V3 · Кубик-сцена + параллакс  ★" width={1440} height={900}>
+            <VariantThree t={t} />
+          </DCArtboard>
+          <DCArtboard id="v1" label="V1 · Центр + лента эпох" width={1440} height={900}>
+            <VariantOne t={t} />
+          </DCArtboard>
+          <DCArtboard id="v2" label="V2 · Editorial split" width={1440} height={900}>
+            <VariantTwo t={t} />
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection
+          id="storyboard"
+          title="Сториборд · сборка грани → Линия жизни"
+          subtitle="6 кадров: idle → hover → клик → собрано → разворот → секция «Линия жизни»."
+        >
+          <DCArtboard id="s1" label="01 · idle" width={1200} height={800}>
+            <Story01 t={t} />
+          </DCArtboard>
+          <DCArtboard id="s2" label="02 · hover" width={1200} height={800}>
+            <Story02 t={t} />
+          </DCArtboard>
+          <DCArtboard id="s3" label="03 · сборка" width={1200} height={800}>
+            <Story03 t={t} />
+          </DCArtboard>
+          <DCArtboard id="s4" label="04 · собрано" width={1200} height={800}>
+            <Story04 t={t} />
+          </DCArtboard>
+          <DCArtboard id="s5" label="05 · разворот" width={1200} height={800}>
+            <Story05 t={t} />
+          </DCArtboard>
+          <DCArtboard id="s6" label="06 · Линия жизни" width={1200} height={800}>
+            <Story06 t={t} />
+          </DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Эпоха" />
+        <TweakSelect
+          label="Активная эпоха"
+          value={t.epoch}
+          options={EPOCH_ORDER.map((id) => ({ value: id, label: EPOCHS[id].ru }))}
+          onChange={(v) => setTweak('epoch', v)}
+        />
+        <TweakRow label="Палитра">
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {EPOCH_ORDER.map((id) => {
+              const e = EPOCHS[id];
+              const on = id === t.epoch;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setTweak('epoch', id)}
+                  title={e.ru}
+                  style={{
+                    display: 'flex', cursor: 'pointer',
+                    border: on ? '2px solid #fff' : '2px solid transparent',
+                    outline: on ? '1px solid rgba(0,0,0,.6)' : 'none',
+                    borderRadius: 4, padding: 0, overflow: 'hidden',
+                    background: 'transparent',
+                  }}
+                >
+                  {e.colors.slice(0, 4).map((c, i) => (
+                    <span key={i} style={{
+                      width: 14, height: 22, background: c, display: 'block',
+                    }} />
+                  ))}
+                </button>
+              );
+            })}
+          </div>
+        </TweakRow>
+
+        <TweakSection label="Плотность" />
+        <TweakRadio
+          label="Контент"
+          value={t.density}
+          options={[
+            { value: 'compact', label: 'compact' },
+            { value: 'regular', label: 'regular' },
+            { value: 'comfy',   label: 'comfy'   },
+          ]}
+          onChange={(v) => setTweak('density', v)}
+        />
+
+        <TweakSection label="Поворот кубика (V3)" />
+        <TweakSlider
+          label="rotation"
+          value={t.rotation}
+          min={-45} max={45} step={1} unit="°"
+          onChange={(v) => setTweak('rotation', v)}
+        />
+        <TweakToggle
+          label="автоповорот"
+          value={t.spin}
+          onChange={(v) => setTweak('spin', v)}
+        />
+
+        <TweakSection label="Навигация" />
+        <TweakRadio
+          label="Что показываем"
+          value={t.altNav ? 'flat' : 'cube'}
+          options={[
+            { value: 'cube', label: 'кубик' },
+            { value: 'flat', label: 'плоская сетка' },
+          ]}
+          onChange={(v) => setTweak('altNav', v === 'flat')}
+        />
+      </TweaksPanel>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
