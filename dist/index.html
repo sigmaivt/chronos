@@ -1,0 +1,4151 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<title>Хронос — Hi-fi V8</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;0,800;0,900;1,400;1,700&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    background: #04040a;
+    color: #f5f3ed;
+    font-family: "DM Sans", system-ui, sans-serif;
+    min-width: 1280px;
+    overflow-x: hidden;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  body { -webkit-font-smoothing: antialiased; }
+  ::selection { background: rgba(245,243,237,0.18); }
+
+  .back-link {
+    position: fixed; bottom: 22px; left: 60px; z-index: 50;
+    font-family: "JetBrains Mono", monospace; font-size: 10px;
+    color: rgba(245,243,237,0.45); letter-spacing: 2px;
+    text-transform: uppercase; text-decoration: none;
+    transition: color 200ms;
+  }
+  .back-link:hover { color: #f5f3ed; }
+</style>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+</head>
+<body>
+<div id="root"></div>
+
+
+<script type="text/babel">
+
+// tweaks-panel.jsx
+// Reusable Tweaks shell + form-control helpers.
+//
+// Owns the host protocol (listens for __activate_edit_mode / __deactivate_edit_mode,
+// posts __edit_mode_available / __edit_mode_set_keys / __edit_mode_dismissed) so
+// individual prototypes don't re-roll it. Ships a consistent set of controls so you
+// don't hand-draw <input type="range">, segmented radios, steppers, etc.
+//
+// Usage (in an HTML file that loads React + Babel):
+//
+//   const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+//     "primaryColor": "#D97757",
+//     "palette": ["#D97757", "#29261b", "#f6f4ef"],
+//     "fontSize": 16,
+//     "density": "regular",
+//     "dark": false
+//   }/*EDITMODE-END*/;
+//
+//   function App() {
+//     const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+//     return (
+//       <div style={{ fontSize: t.fontSize, color: t.primaryColor }}>
+//         Hello
+//         <TweaksPanel>
+//           <TweakSection label="Typography" />
+//           <TweakSlider label="Font size" value={t.fontSize} min={10} max={32} unit="px"
+//                        onChange={(v) => setTweak('fontSize', v)} />
+//           <TweakRadio  label="Density" value={t.density}
+//                        options={['compact', 'regular', 'comfy']}
+//                        onChange={(v) => setTweak('density', v)} />
+//           <TweakSection label="Theme" />
+//           <TweakColor  label="Primary" value={t.primaryColor}
+//                        options={['#D97757', '#2A6FDB', '#1F8A5B', '#7A5AE0']}
+//                        onChange={(v) => setTweak('primaryColor', v)} />
+//           <TweakColor  label="Palette" value={t.palette}
+//                        options={[['#D97757', '#29261b', '#f6f4ef'],
+//                                  ['#475569', '#0f172a', '#f1f5f9']]}
+//                        onChange={(v) => setTweak('palette', v)} />
+//           <TweakToggle label="Dark mode" value={t.dark}
+//                        onChange={(v) => setTweak('dark', v)} />
+//         </TweaksPanel>
+//       </div>
+//     );
+//   }
+//
+// ─────────────────────────────────────────────────────────────────────────────
+
+const __TWEAKS_STYLE = `
+  .twk-panel{position:fixed;right:16px;bottom:16px;z-index:2147483646;width:280px;
+    max-height:calc(100vh - 32px);display:flex;flex-direction:column;
+    transform:scale(var(--dc-inv-zoom,1));transform-origin:bottom right;
+    background:rgba(250,249,247,.78);color:#29261b;
+    -webkit-backdrop-filter:blur(24px) saturate(160%);backdrop-filter:blur(24px) saturate(160%);
+    border:.5px solid rgba(255,255,255,.6);border-radius:14px;
+    box-shadow:0 1px 0 rgba(255,255,255,.5) inset,0 12px 40px rgba(0,0,0,.18);
+    font:11.5px/1.4 ui-sans-serif,system-ui,-apple-system,sans-serif;overflow:hidden}
+  .twk-hd{display:flex;align-items:center;justify-content:space-between;
+    padding:10px 8px 10px 14px;cursor:move;user-select:none}
+  .twk-hd b{font-size:12px;font-weight:600;letter-spacing:.01em}
+  .twk-x{appearance:none;border:0;background:transparent;color:rgba(41,38,27,.55);
+    width:22px;height:22px;border-radius:6px;cursor:default;font-size:13px;line-height:1}
+  .twk-x:hover{background:rgba(0,0,0,.06);color:#29261b}
+  .twk-body{padding:2px 14px 14px;display:flex;flex-direction:column;gap:10px;
+    overflow-y:auto;overflow-x:hidden;min-height:0;
+    scrollbar-width:thin;scrollbar-color:rgba(0,0,0,.15) transparent}
+  .twk-body::-webkit-scrollbar{width:8px}
+  .twk-body::-webkit-scrollbar-track{background:transparent;margin:2px}
+  .twk-body::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:4px;
+    border:2px solid transparent;background-clip:content-box}
+  .twk-body::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.25);
+    border:2px solid transparent;background-clip:content-box}
+  .twk-row{display:flex;flex-direction:column;gap:5px}
+  .twk-row-h{flex-direction:row;align-items:center;justify-content:space-between;gap:10px}
+  .twk-lbl{display:flex;justify-content:space-between;align-items:baseline;
+    color:rgba(41,38,27,.72)}
+  .twk-lbl>span:first-child{font-weight:500}
+  .twk-val{color:rgba(41,38,27,.5);font-variant-numeric:tabular-nums}
+
+  .twk-sect{font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+    color:rgba(41,38,27,.45);padding:10px 0 0}
+  .twk-sect:first-child{padding-top:0}
+
+  .twk-field{appearance:none;box-sizing:border-box;width:100%;min-width:0;height:26px;padding:0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;
+    background:rgba(255,255,255,.6);color:inherit;font:inherit;outline:none}
+  .twk-field:focus{border-color:rgba(0,0,0,.25);background:rgba(255,255,255,.85)}
+  select.twk-field{padding-right:22px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='rgba(0,0,0,.5)' d='M0 0h10L5 6z'/></svg>");
+    background-repeat:no-repeat;background-position:right 8px center}
+
+  .twk-slider{appearance:none;-webkit-appearance:none;width:100%;height:4px;margin:6px 0;
+    border-radius:999px;background:rgba(0,0,0,.12);outline:none}
+  .twk-slider::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+    width:14px;height:14px;border-radius:50%;background:#fff;
+    border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+  .twk-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;
+    background:#fff;border:.5px solid rgba(0,0,0,.12);box-shadow:0 1px 3px rgba(0,0,0,.2);cursor:default}
+
+  .twk-seg{position:relative;display:flex;padding:2px;border-radius:8px;
+    background:rgba(0,0,0,.06);user-select:none}
+  .twk-seg-thumb{position:absolute;top:2px;bottom:2px;border-radius:6px;
+    background:rgba(255,255,255,.9);box-shadow:0 1px 2px rgba(0,0,0,.12);
+    transition:left .15s cubic-bezier(.3,.7,.4,1),width .15s}
+  .twk-seg.dragging .twk-seg-thumb{transition:none}
+  .twk-seg button{appearance:none;position:relative;z-index:1;flex:1;border:0;
+    background:transparent;color:inherit;font:inherit;font-weight:500;min-height:22px;
+    border-radius:6px;cursor:default;padding:4px 6px;line-height:1.2;
+    overflow-wrap:anywhere}
+
+  .twk-toggle{position:relative;width:32px;height:18px;border:0;border-radius:999px;
+    background:rgba(0,0,0,.15);transition:background .15s;cursor:default;padding:0}
+  .twk-toggle[data-on="1"]{background:#34c759}
+  .twk-toggle i{position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;
+    background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:transform .15s}
+  .twk-toggle[data-on="1"] i{transform:translateX(14px)}
+
+  .twk-num{display:flex;align-items:center;box-sizing:border-box;min-width:0;height:26px;padding:0 0 0 8px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:7px;background:rgba(255,255,255,.6)}
+  .twk-num-lbl{font-weight:500;color:rgba(41,38,27,.6);cursor:ew-resize;
+    user-select:none;padding-right:8px}
+  .twk-num input{flex:1;min-width:0;height:100%;border:0;background:transparent;
+    font:inherit;font-variant-numeric:tabular-nums;text-align:right;padding:0 8px 0 0;
+    outline:none;color:inherit;-moz-appearance:textfield}
+  .twk-num input::-webkit-inner-spin-button,.twk-num input::-webkit-outer-spin-button{
+    -webkit-appearance:none;margin:0}
+  .twk-num-unit{padding-right:8px;color:rgba(41,38,27,.45)}
+
+  .twk-btn{appearance:none;height:26px;padding:0 12px;border:0;border-radius:7px;
+    background:rgba(0,0,0,.78);color:#fff;font:inherit;font-weight:500;cursor:default}
+  .twk-btn:hover{background:rgba(0,0,0,.88)}
+  .twk-btn.secondary{background:rgba(0,0,0,.06);color:inherit}
+  .twk-btn.secondary:hover{background:rgba(0,0,0,.1)}
+
+  .twk-swatch{appearance:none;-webkit-appearance:none;width:56px;height:22px;
+    border:.5px solid rgba(0,0,0,.1);border-radius:6px;padding:0;cursor:default;
+    background:transparent;flex-shrink:0}
+  .twk-swatch::-webkit-color-swatch-wrapper{padding:0}
+  .twk-swatch::-webkit-color-swatch{border:0;border-radius:5.5px}
+  .twk-swatch::-moz-color-swatch{border:0;border-radius:5.5px}
+
+  .twk-chips{display:flex;gap:6px}
+  .twk-chip{position:relative;appearance:none;flex:1;min-width:0;height:46px;
+    padding:0;border:0;border-radius:6px;overflow:hidden;cursor:default;
+    box-shadow:0 0 0 .5px rgba(0,0,0,.12),0 1px 2px rgba(0,0,0,.06);
+    transition:transform .12s cubic-bezier(.3,.7,.4,1),box-shadow .12s}
+  .twk-chip:hover{transform:translateY(-1px);
+    box-shadow:0 0 0 .5px rgba(0,0,0,.18),0 4px 10px rgba(0,0,0,.12)}
+  .twk-chip[data-on="1"]{box-shadow:0 0 0 1.5px rgba(0,0,0,.85),
+    0 2px 6px rgba(0,0,0,.15)}
+  .twk-chip>span{position:absolute;top:0;bottom:0;right:0;width:34%;
+    display:flex;flex-direction:column;box-shadow:-1px 0 0 rgba(0,0,0,.1)}
+  .twk-chip>span>i{flex:1;box-shadow:0 -1px 0 rgba(0,0,0,.1)}
+  .twk-chip>span>i:first-child{box-shadow:none}
+  .twk-chip svg{position:absolute;top:6px;left:6px;width:13px;height:13px;
+    filter:drop-shadow(0 1px 1px rgba(0,0,0,.3))}
+`;
+
+// ── useTweaks ───────────────────────────────────────────────────────────────
+// Single source of truth for tweak values. setTweak persists via the host
+// (__edit_mode_set_keys → host rewrites the EDITMODE block on disk).
+function useTweaks(defaults) {
+  const [values, setValues] = React.useState(defaults);
+  // Accepts either setTweak('key', value) or setTweak({ key: value, ... }) so a
+  // useState-style call doesn't write a "[object Object]" key into the persisted
+  // JSON block.
+  const setTweak = React.useCallback((keyOrEdits, val) => {
+    const edits = typeof keyOrEdits === 'object' && keyOrEdits !== null
+      ? keyOrEdits : { [keyOrEdits]: val };
+    setValues((prev) => ({ ...prev, ...edits }));
+    window.parent.postMessage({ type: '__edit_mode_set_keys', edits }, '*');
+    // Same-window signal so in-page listeners (deck-stage rail thumbnails)
+    // can react — the parent message only reaches the host, not peers.
+    window.dispatchEvent(new CustomEvent('tweakchange', { detail: edits }));
+  }, []);
+  return [values, setTweak];
+}
+
+// ── TweaksPanel ─────────────────────────────────────────────────────────────
+// Floating shell. Registers the protocol listener BEFORE announcing
+// availability — if the announce ran first, the host's activate could land
+// before our handler exists and the toolbar toggle would silently no-op.
+// The close button posts __edit_mode_dismissed so the host's toolbar toggle
+// flips off in lockstep; the host echoes __deactivate_edit_mode back which
+// is what actually hides the panel.
+function TweaksPanel({ title = 'Tweaks', noDeckControls = false, children }) {
+  const [open, setOpen] = React.useState(false);
+  const dragRef = React.useRef(null);
+  // Auto-inject a rail toggle when a <deck-stage> is on the page. The
+  // toggle drives the deck's per-viewer _railVisible via window message;
+  // state is mirrored from the same localStorage key the deck reads so
+  // the control reflects reality across reloads. The mechanism is the
+  // message — authors who want custom placement can post it directly
+  // and pass noDeckControls to suppress this one.
+  const hasDeckStage = React.useMemo(
+    () => typeof document !== 'undefined' && !!document.querySelector('deck-stage'),
+    [],
+  );
+  // deck-stage enables its rail in connectedCallback, but this panel can
+  // mount before that element has upgraded. The initial read catches the
+  // common case; the listener covers mounting first. (Older deck-stage.js
+  // copies still wait for the host's __omelette_rail_enabled postMessage —
+  // same listener handles those.)
+  const [railEnabled, setRailEnabled] = React.useState(
+    () => hasDeckStage && !!document.querySelector('deck-stage')?._railEnabled,
+  );
+  React.useEffect(() => {
+    if (!hasDeckStage || railEnabled) return undefined;
+    const onMsg = (e) => {
+      if (e.data && e.data.type === '__omelette_rail_enabled') setRailEnabled(true);
+    };
+    window.addEventListener('message', onMsg);
+    return () => window.removeEventListener('message', onMsg);
+  }, [hasDeckStage, railEnabled]);
+  const [railVisible, setRailVisible] = React.useState(() => {
+    try { return localStorage.getItem('deck-stage.railVisible') !== '0'; } catch (e) { return true; }
+  });
+  const toggleRail = (on) => {
+    setRailVisible(on);
+    window.postMessage({ type: '__deck_rail_visible', on }, '*');
+  };
+  const offsetRef = React.useRef({ x: 16, y: 16 });
+  const PAD = 16;
+
+  const clampToViewport = React.useCallback(() => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const w = panel.offsetWidth, h = panel.offsetHeight;
+    const maxRight = Math.max(PAD, window.innerWidth - w - PAD);
+    const maxBottom = Math.max(PAD, window.innerHeight - h - PAD);
+    offsetRef.current = {
+      x: Math.min(maxRight, Math.max(PAD, offsetRef.current.x)),
+      y: Math.min(maxBottom, Math.max(PAD, offsetRef.current.y)),
+    };
+    panel.style.right = offsetRef.current.x + 'px';
+    panel.style.bottom = offsetRef.current.y + 'px';
+  }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    clampToViewport();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', clampToViewport);
+      return () => window.removeEventListener('resize', clampToViewport);
+    }
+    const ro = new ResizeObserver(clampToViewport);
+    ro.observe(document.documentElement);
+    return () => ro.disconnect();
+  }, [open, clampToViewport]);
+
+  React.useEffect(() => {
+    const onMsg = (e) => {
+      const t = e?.data?.type;
+      if (t === '__activate_edit_mode') setOpen(true);
+      else if (t === '__deactivate_edit_mode') setOpen(false);
+    };
+    window.addEventListener('message', onMsg);
+    window.parent.postMessage({ type: '__edit_mode_available' }, '*');
+    return () => window.removeEventListener('message', onMsg);
+  }, []);
+
+  const dismiss = () => {
+    setOpen(false);
+    window.parent.postMessage({ type: '__edit_mode_dismissed' }, '*');
+  };
+
+  const onDragStart = (e) => {
+    const panel = dragRef.current;
+    if (!panel) return;
+    const r = panel.getBoundingClientRect();
+    const sx = e.clientX, sy = e.clientY;
+    const startRight = window.innerWidth - r.right;
+    const startBottom = window.innerHeight - r.bottom;
+    const move = (ev) => {
+      offsetRef.current = {
+        x: startRight - (ev.clientX - sx),
+        y: startBottom - (ev.clientY - sy),
+      };
+      clampToViewport();
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
+  if (!open) return null;
+  return (
+    <>
+      <style>{__TWEAKS_STYLE}</style>
+      <div ref={dragRef} className="twk-panel" data-noncommentable=""
+           style={{ right: offsetRef.current.x, bottom: offsetRef.current.y }}>
+        <div className="twk-hd" onMouseDown={onDragStart}>
+          <b>{title}</b>
+          <button className="twk-x" aria-label="Close tweaks"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={dismiss}>✕</button>
+        </div>
+        <div className="twk-body">
+          {children}
+          {hasDeckStage && railEnabled && !noDeckControls && (
+            <TweakSection label="Deck">
+              <TweakToggle label="Thumbnail rail" value={railVisible} onChange={toggleRail} />
+            </TweakSection>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── Layout helpers ──────────────────────────────────────────────────────────
+
+function TweakSection({ label, children }) {
+  return (
+    <>
+      <div className="twk-sect">{label}</div>
+      {children}
+    </>
+  );
+}
+
+function TweakRow({ label, value, children, inline = false }) {
+  return (
+    <div className={inline ? 'twk-row twk-row-h' : 'twk-row'}>
+      <div className="twk-lbl">
+        <span>{label}</span>
+        {value != null && <span className="twk-val">{value}</span>}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ── Controls ────────────────────────────────────────────────────────────────
+
+function TweakSlider({ label, value, min = 0, max = 100, step = 1, unit = '', onChange }) {
+  return (
+    <TweakRow label={label} value={`${value}${unit}`}>
+      <input type="range" className="twk-slider" min={min} max={max} step={step}
+             value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </TweakRow>
+  );
+}
+
+function TweakToggle({ label, value, onChange }) {
+  return (
+    <div className="twk-row twk-row-h">
+      <div className="twk-lbl"><span>{label}</span></div>
+      <button type="button" className="twk-toggle" data-on={value ? '1' : '0'}
+              role="switch" aria-checked={!!value}
+              onClick={() => onChange(!value)}><i /></button>
+    </div>
+  );
+}
+
+function TweakRadio({ label, value, options, onChange }) {
+  const trackRef = React.useRef(null);
+  const [dragging, setDragging] = React.useState(false);
+  // The active value is read by pointer-move handlers attached for the lifetime
+  // of a drag — ref it so a stale closure doesn't fire onChange for every move.
+  const valueRef = React.useRef(value);
+  valueRef.current = value;
+
+  // Segments wrap mid-word once per-segment width runs out. The track is
+  // ~248px (280 panel − 28 body pad − 4 seg pad), each button loses 12px
+  // to its own padding, and 11.5px system-ui averages ~6.3px/char — so 2
+  // options fit ~16 chars each, 3 fit ~10. Past that (or >3 options), fall
+  // back to a dropdown rather than wrap.
+  const labelLen = (o) => String(typeof o === 'object' ? o.label : o).length;
+  const maxLen = options.reduce((m, o) => Math.max(m, labelLen(o)), 0);
+  const fitsAsSegments = maxLen <= ({ 2: 16, 3: 10 }[options.length] ?? 0);
+  if (!fitsAsSegments) {
+    // <select> emits strings — map back to the original option value so the
+    // fallback stays type-preserving (numbers, booleans) like the segment path.
+    const resolve = (s) => {
+      const m = options.find((o) => String(typeof o === 'object' ? o.value : o) === s);
+      return m === undefined ? s : typeof m === 'object' ? m.value : m;
+    };
+    return <TweakSelect label={label} value={value} options={options}
+                        onChange={(s) => onChange(resolve(s))} />;
+  }
+  const opts = options.map((o) => (typeof o === 'object' ? o : { value: o, label: o }));
+  const idx = Math.max(0, opts.findIndex((o) => o.value === value));
+  const n = opts.length;
+
+  const segAt = (clientX) => {
+    const r = trackRef.current.getBoundingClientRect();
+    const inner = r.width - 4;
+    const i = Math.floor(((clientX - r.left - 2) / inner) * n);
+    return opts[Math.max(0, Math.min(n - 1, i))].value;
+  };
+
+  const onPointerDown = (e) => {
+    setDragging(true);
+    const v0 = segAt(e.clientX);
+    if (v0 !== valueRef.current) onChange(v0);
+    const move = (ev) => {
+      if (!trackRef.current) return;
+      const v = segAt(ev.clientX);
+      if (v !== valueRef.current) onChange(v);
+    };
+    const up = () => {
+      setDragging(false);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  return (
+    <TweakRow label={label}>
+      <div ref={trackRef} role="radiogroup" onPointerDown={onPointerDown}
+           className={dragging ? 'twk-seg dragging' : 'twk-seg'}>
+        <div className="twk-seg-thumb"
+             style={{ left: `calc(2px + ${idx} * (100% - 4px) / ${n})`,
+                      width: `calc((100% - 4px) / ${n})` }} />
+        {opts.map((o) => (
+          <button key={o.value} type="button" role="radio" aria-checked={o.value === value}>
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakSelect({ label, value, options, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <select className="twk-field" value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((o) => {
+          const v = typeof o === 'object' ? o.value : o;
+          const l = typeof o === 'object' ? o.label : o;
+          return <option key={v} value={v}>{l}</option>;
+        })}
+      </select>
+    </TweakRow>
+  );
+}
+
+function TweakText({ label, value, placeholder, onChange }) {
+  return (
+    <TweakRow label={label}>
+      <input className="twk-field" type="text" value={value} placeholder={placeholder}
+             onChange={(e) => onChange(e.target.value)} />
+    </TweakRow>
+  );
+}
+
+function TweakNumber({ label, value, min, max, step = 1, unit = '', onChange }) {
+  const clamp = (n) => {
+    if (min != null && n < min) return min;
+    if (max != null && n > max) return max;
+    return n;
+  };
+  const startRef = React.useRef({ x: 0, val: 0 });
+  const onScrubStart = (e) => {
+    e.preventDefault();
+    startRef.current = { x: e.clientX, val: value };
+    const decimals = (String(step).split('.')[1] || '').length;
+    const move = (ev) => {
+      const dx = ev.clientX - startRef.current.x;
+      const raw = startRef.current.val + dx * step;
+      const snapped = Math.round(raw / step) * step;
+      onChange(clamp(Number(snapped.toFixed(decimals))));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  return (
+    <div className="twk-num">
+      <span className="twk-num-lbl" onPointerDown={onScrubStart}>{label}</span>
+      <input type="number" value={value} min={min} max={max} step={step}
+             onChange={(e) => onChange(clamp(Number(e.target.value)))} />
+      {unit && <span className="twk-num-unit">{unit}</span>}
+    </div>
+  );
+}
+
+// Relative-luminance contrast pick — checkmarks drawn over a swatch need to
+// read on both #111 and #fafafa without per-option configuration. Hex input
+// only (#rgb / #rrggbb); named or rgb()/hsl() colors fall through to "light".
+function __twkIsLight(hex) {
+  const h = String(hex).replace('#', '');
+  const x = h.length === 3 ? h.replace(/./g, (c) => c + c) : h.padEnd(6, '0');
+  const n = parseInt(x.slice(0, 6), 16);
+  if (Number.isNaN(n)) return true;
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  return r * 299 + g * 587 + b * 114 > 148000;
+}
+
+const __TwkCheck = ({ light }) => (
+  <svg viewBox="0 0 14 14" aria-hidden="true">
+    <path d="M3 7.2 5.8 10 11 4.2" fill="none" strokeWidth="2.2"
+          strokeLinecap="round" strokeLinejoin="round"
+          stroke={light ? 'rgba(0,0,0,.78)' : '#fff'} />
+  </svg>
+);
+
+// TweakColor — curated color/palette picker. Each option is either a single
+// hex string or an array of 1-5 hex strings; the card adapts — a lone color
+// renders solid, a palette renders colors[0] as the hero (left ~2/3) with the
+// rest stacked in a sharp column on the right. onChange emits the
+// option in the shape it was passed (string stays string, array stays array).
+// Without options it falls back to the native color input for back-compat.
+function TweakColor({ label, value, options, onChange }) {
+  if (!options || !options.length) {
+    return (
+      <div className="twk-row twk-row-h">
+        <div className="twk-lbl"><span>{label}</span></div>
+        <input type="color" className="twk-swatch" value={value}
+               onChange={(e) => onChange(e.target.value)} />
+      </div>
+    );
+  }
+  // Native <input type=color> emits lowercase hex per the HTML spec, so
+  // compare case-insensitively. String() guards JSON.stringify(undefined),
+  // which returns the primitive undefined (no .toLowerCase).
+  const key = (o) => String(JSON.stringify(o)).toLowerCase();
+  const cur = key(value);
+  return (
+    <TweakRow label={label}>
+      <div className="twk-chips" role="radiogroup">
+        {options.map((o, i) => {
+          const colors = Array.isArray(o) ? o : [o];
+          const [hero, ...rest] = colors;
+          const sup = rest.slice(0, 4);
+          const on = key(o) === cur;
+          return (
+            <button key={i} type="button" className="twk-chip" role="radio"
+                    aria-checked={on} data-on={on ? '1' : '0'}
+                    aria-label={colors.join(', ')} title={colors.join(' · ')}
+                    style={{ background: hero }}
+                    onClick={() => onChange(o)}>
+              {sup.length > 0 && (
+                <span>
+                  {sup.map((c, j) => <i key={j} style={{ background: c }} />)}
+                </span>
+              )}
+              {on && <__TwkCheck light={__twkIsLight(hero)} />}
+            </button>
+          );
+        })}
+      </div>
+    </TweakRow>
+  );
+}
+
+function TweakButton({ label, onClick, secondary = false }) {
+  return (
+    <button type="button" className={secondary ? 'twk-btn secondary' : 'twk-btn'}
+            onClick={onClick}>{label}</button>
+  );
+}
+
+Object.assign(window, {
+  useTweaks, TweaksPanel, TweakSection, TweakRow,
+  TweakSlider, TweakToggle, TweakRadio, TweakSelect,
+  TweakText, TweakNumber, TweakColor, TweakButton,
+});
+
+</script>
+<script type="text/babel">
+// Isometric Rubik's cube — wireframe edition.
+// Three visible faces (top, left, right), each 3×3, drawn as SVG polygons
+// with a "sketchy" hand-drawn look (dashed strokes, jittered fills).
+
+const EPOCHS = /*EPOCHS*/ {
+  ancient: {
+    id: 'ancient',
+    ru: 'Древний мир',
+    range: '~3000 BCE – 500',
+    colors: ['#c9a14a', '#a06a2d', '#c25a3b', '#e3b97a', '#7a4a26'],
+    ink: '#5a3a14',
+  },
+  medieval: {
+    id: 'medieval',
+    ru: 'Средневековье',
+    range: '500 – 1400',
+    colors: ['#2d4a8a', '#a8b0c0', '#1f2f5c', '#5d75aa', '#d8dde6'],
+    ink: '#1c2a4a',
+  },
+  renaissance: {
+    id: 'renaissance',
+    ru: 'Ренессанс',
+    range: '1400 – 1650',
+    colors: ['#2e7d5b', '#7a2238', '#e8dcc0', '#4ea37e', '#a8344e'],
+    ink: '#3a1a20',
+  },
+  modern: {
+    id: 'modern',
+    ru: 'Новое время',
+    range: '1650 – 1900',
+    colors: ['#1f4a2a', '#6b3a2a', '#bf945a', '#3f7a4a', '#8a5a32'],
+    ink: '#2a1a10',
+  },
+  contemporary: {
+    id: 'contemporary',
+    ru: 'Современность',
+    range: '1900 – сейчас',
+    colors: ['#0066ff', '#d23df0', '#f5f5f7', '#22d3ee', '#fbbf24'],
+    ink: '#0a0a14',
+  },
+};
+
+const EPOCH_ORDER = ['ancient', 'medieval', 'renaissance', 'modern', 'contemporary'];
+
+// Pick 9 cells from an epoch palette, deterministically (so same epoch → same look).
+function pickCells(epoch, seed = 0) {
+  const pal = EPOCHS[epoch].colors;
+  // simple LCG for stable jitter
+  let s = (seed * 2654435761) >>> 0;
+  const rnd = () => { s = (s * 1664525 + 1013904223) >>> 0; return (s >>> 8) / 0xffffff; };
+  const out = [];
+  for (let i = 0; i < 9; i++) {
+    out.push(pal[Math.floor(rnd() * pal.length)]);
+  }
+  return out;
+}
+
+// IsoCube — `size` is the edge length in px. Renders centered around (0,0)
+// inside its own SVG viewBox. Pass `faceEpochs` to colour individual faces.
+function IsoCube({
+  size = 240,
+  faceEpochs = { top: 'contemporary', left: 'ancient', right: 'renaissance' },
+  sketchy = true,
+  labels = true,
+  glow = true,
+  hideRight = false,
+  hideLeft = false,
+  highlight = null, // 'top' | 'left' | 'right' | null
+  // Storyboard extras:
+  glowFace = null,         // 'top' | 'left' | 'right' — paint a glow halo on this face
+  solidFace = null,        // which face is being "assembled"
+  solidColor = '#0066ff',  // the target color of assembled cells
+  solidProgress = 0,       // 0..9 — how many cells already match
+  shake = 0,               // -1..1 — small rotation applied to the whole cube
+}) {
+  const U = size;
+  // iso unit vectors
+  const ax = { x: 0.866 * U, y: 0.5 * U };   // right
+  const ay = { x: -0.866 * U, y: 0.5 * U };  // back/left
+  const az = { x: 0, y: -U };                 // up
+
+  // origin: front-bottom corner where all 3 faces meet at the top? No —
+  // in iso, the topmost vertex is up. Let's set origin at the FRONT vertex
+  // (center, the one where top/left/right faces meet at the front).
+  // Then:
+  //   front (top/left/right share): (0, 0)
+  //   right-top corner of top:      front + ax + az/U? wait — top face vertices are at z=U
+  // Easier: place vertices directly.
+
+  // Top face vertices (going around):
+  const topV = [
+    { x: 0, y: -U },                       // back-top (highest)
+    { x: ax.x, y: -U + ax.y },             // right-top
+    { x: ax.x + ay.x, y: -U + ax.y + ay.y }, // front-top
+    { x: ay.x, y: -U + ay.y },             // left-top
+  ];
+  // Front-top is at (0, 0).
+
+  // Left face (between left-top, front-top, front-bottom, left-bottom)
+  const leftV = [
+    topV[3],                               // left-top
+    topV[2],                               // front-top (0,0)
+    { x: topV[2].x, y: topV[2].y + U },    // front-bottom
+    { x: topV[3].x, y: topV[3].y + U },    // left-bottom
+  ];
+  // Right face
+  const rightV = [
+    topV[2],                               // front-top
+    topV[1],                               // right-top
+    { x: topV[1].x, y: topV[1].y + U },    // right-bottom
+    { x: topV[2].x, y: topV[2].y + U },    // front-bottom
+  ];
+
+  // For each face, build a 3×3 grid of small parallelogram cells.
+  // Given 4 corners A,B,C,D (in order), cell (i,j) for i,j in 0..2 maps to
+  // bilinear interp.
+  const bilerp = (A, B, C, D, u, v) => {
+    // u along A→B, v along A→D (so A,B,C,D winding A→B→C→D forms quad)
+    const ab = { x: A.x + (B.x - A.x) * u, y: A.y + (B.y - A.y) * u };
+    const dc = { x: D.x + (C.x - D.x) * u, y: D.y + (C.y - D.y) * u };
+    return { x: ab.x + (dc.x - ab.x) * v, y: ab.y + (dc.y - ab.y) * v };
+  };
+
+  const buildCells = (corners, epoch, seed) => {
+    const colors = pickCells(epoch, seed);
+    const cells = [];
+    for (let j = 0; j < 3; j++) {
+      for (let i = 0; i < 3; i++) {
+        const u0 = i / 3, u1 = (i + 1) / 3;
+        const v0 = j / 3, v1 = (j + 1) / 3;
+        const A = bilerp(corners[0], corners[1], corners[2], corners[3], u0, v0);
+        const B = bilerp(corners[0], corners[1], corners[2], corners[3], u1, v0);
+        const C = bilerp(corners[0], corners[1], corners[2], corners[3], u1, v1);
+        const D = bilerp(corners[0], corners[1], corners[2], corners[3], u0, v1);
+        cells.push({
+          pts: [A, B, C, D],
+          color: colors[j * 3 + i],
+          idx: j * 3 + i,
+        });
+      }
+    }
+    return cells;
+  };
+
+  const topCells = buildCells(topV, faceEpochs.top, 1);
+  const leftCells = buildCells(leftV, faceEpochs.left, 2);
+  const rightCells = buildCells(rightV, faceEpochs.right, 3);
+
+  // Storyboard: paint the first N cells of the "assembling" face with the
+  // target colour, leaving the rest unchanged. This is what frame 03 shows.
+  const applySolid = (face, cells) => {
+    if (solidFace !== face) return cells;
+    const n = Math.max(0, Math.min(9, solidProgress));
+    return cells.map((c, i) => i < n ? { ...c, color: solidColor, solid: true } : c);
+  };
+  const _top = applySolid('top', topCells);
+  const _left = applySolid('left', leftCells);
+  const _right = applySolid('right', rightCells);
+
+  const toPoints = (pts) => pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+
+  // viewBox bounding box
+  const allPts = [...topV, ...leftV, ...rightV];
+  const xs = allPts.map((p) => p.x), ys = allPts.map((p) => p.y);
+  const pad = 60;
+  const minX = Math.min(...xs) - pad, maxX = Math.max(...xs) + pad;
+  const minY = Math.min(...ys) - pad, maxY = Math.max(...ys) + pad;
+  const w = maxX - minX, h = maxY - minY;
+
+  const stroke = '#2a2218';
+  const sw = 2.2;
+
+  // Pre-compute the polygon for the highlighted/glowing face so we can blur
+  // and draw it behind everything.
+  const glowPolys = {
+    top: topV, left: leftV, right: rightV,
+  };
+
+  return (
+    <svg
+      viewBox={`${minX} ${minY} ${w} ${h}`}
+      width="100%"
+      height="100%"
+      style={{
+        overflow: 'visible', display: 'block',
+        transform: shake ? `rotate(${(shake * 1.5).toFixed(2)}deg)` : 'none',
+        transformOrigin: 'center center',
+      }}
+    >
+      <defs>
+        <filter id="sketchy-rough" x="-10%" y="-10%" width="120%" height="120%">
+          <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="2" seed="3" />
+          <feDisplacementMap in="SourceGraphic" scale={sketchy ? 1.8 : 0} />
+        </filter>
+        <filter id="cube-glow" x="-40%" y="-40%" width="180%" height="180%">
+          <feGaussianBlur stdDeviation="10" />
+        </filter>
+      </defs>
+
+      {/* glow halo behind a specific face */}
+      {glowFace && glowPolys[glowFace] && (
+        <polygon
+          points={toPoints(glowPolys[glowFace])}
+          fill={solidColor}
+          opacity="0.55"
+          filter="url(#cube-glow)"
+          transform={`scale(1.15) translate(${glowFace === 'right' ? 10 : glowFace === 'left' ? -10 : 0} ${glowFace === 'top' ? -10 : 6})`}
+          transform-origin="center center"
+        />
+      )}
+
+      {/* glow puddle under cube */}
+      {glow && (
+        <ellipse
+          cx={0} cy={U + 24}
+          rx={U * 0.95} ry={U * 0.18}
+          fill="#2a2218"
+          opacity="0.08"
+        />
+      )}
+
+      <g filter={sketchy ? 'url(#sketchy-rough)' : undefined}>
+        {/* TOP FACE */}
+        {!false && (
+          <g opacity={highlight && highlight !== 'top' ? 0.5 : 1}>
+            {_top.map((c, k) => (
+              <polygon
+                key={`t${k}`}
+                points={toPoints(c.pts)}
+                fill={c.color}
+                fillOpacity={c.solid ? 0.96 : 0.78}
+                stroke={stroke}
+                strokeWidth={sw * (c.solid ? 1.2 : 0.8)}
+                strokeLinejoin="round"
+                strokeDasharray={sketchy && !c.solid ? '5 3' : '0'}
+              />
+            ))}
+            <polygon
+              points={toPoints(topV)}
+              fill="none"
+              stroke={stroke}
+              strokeWidth={sw * 1.6}
+              strokeLinejoin="round"
+            />
+          </g>
+        )}
+
+        {/* LEFT FACE */}
+        {!hideLeft && (
+          <g opacity={highlight && highlight !== 'left' ? 0.5 : 1}>
+            {_left.map((c, k) => (
+              <polygon
+                key={`l${k}`}
+                points={toPoints(c.pts)}
+                fill={c.color}
+                fillOpacity={c.solid ? 0.96 : 0.7}
+                stroke={stroke}
+                strokeWidth={sw * (c.solid ? 1.2 : 0.8)}
+                strokeLinejoin="round"
+                strokeDasharray={sketchy && !c.solid ? '5 3' : '0'}
+              />
+            ))}
+            <polygon
+              points={toPoints(leftV)}
+              fill="none"
+              stroke={stroke}
+              strokeWidth={sw * 1.6}
+              strokeLinejoin="round"
+            />
+          </g>
+        )}
+
+        {/* RIGHT FACE */}
+        {!hideRight && (
+          <g opacity={highlight && highlight !== 'right' ? 0.5 : 1}>
+            {_right.map((c, k) => (
+              <polygon
+                key={`r${k}`}
+                points={toPoints(c.pts)}
+                fill={c.color}
+                fillOpacity={c.solid ? 0.96 : 0.82}
+                stroke={stroke}
+                strokeWidth={sw * (c.solid ? 1.2 : 0.8)}
+                strokeLinejoin="round"
+                strokeDasharray={sketchy && !c.solid ? '5 3' : '0'}
+              />
+            ))}
+            <polygon
+              points={toPoints(rightV)}
+              fill="none"
+              stroke={stroke}
+              strokeWidth={sw * 1.6}
+              strokeLinejoin="round"
+            />
+          </g>
+        )}
+      </g>
+
+      {/* face labels — outside the sketchy filter so type stays crisp */}
+      {labels && (
+        <g style={{ fontFamily: '"Caveat", cursive', fontSize: 22, fill: '#2a2218' }}>
+          <text x={0} y={-U - 14} textAnchor="middle">верх → вход</text>
+          <text
+            x={leftV[3].x - 14} y={leftV[3].y + U * 0.6}
+            textAnchor="end"
+          >
+            лево → контекст
+          </text>
+          <text
+            x={rightV[2].x + 14} y={rightV[2].y - U * 0.4}
+            textAnchor="start"
+          >
+            право → рефлексия
+          </text>
+        </g>
+      )}
+    </svg>
+  );
+}
+
+// Flat alternative-navigation grid (used when the "альт. навигация" tweak is on).
+function FlatNavGrid({ tile = 130, epochAccent = 'contemporary' }) {
+  const sections = [
+    { face: 'top', cell: 'Начало', sub: 'дата рождения', e: 'contemporary' },
+    { face: 'top', cell: 'Твоя секунда', sub: 'сутки = 5000 лет', e: 'ancient' },
+    { face: 'top', cell: 'Эпохи', sub: 'scroll-лента', e: 'medieval' },
+    { face: 'left', cell: 'Современники', sub: 'кто был жив', e: 'renaissance' },
+    { face: 'left', cell: 'Изобретения', sub: 'что уже было', e: 'modern' },
+    { face: 'right', cell: 'Линия жизни', sub: 'две шкалы', e: epochAccent },
+  ];
+  return (
+    <div style={{
+      display: 'grid',
+      gridTemplateColumns: `repeat(3, ${tile}px)`,
+      gridTemplateRows: `repeat(2, ${tile}px)`,
+      gap: 14,
+    }}>
+      {sections.map((s, i) => {
+        const pal = EPOCHS[s.e].colors;
+        return (
+          <div key={i} style={{
+            width: tile, height: tile,
+            background: pal[0],
+            border: '2.5px dashed #2a2218',
+            borderRadius: 6,
+            position: 'relative',
+            display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
+            padding: 10,
+            boxShadow: '4px 5px 0 #2a2218',
+            transform: `rotate(${(i % 2 ? 1 : -1) * 0.4}deg)`,
+          }}>
+            <div style={{
+              position: 'absolute', top: 8, right: 10,
+              fontFamily: '"JetBrains Mono", monospace', fontSize: 10,
+              color: '#2a2218', opacity: 0.6, letterSpacing: 1,
+            }}>{s.face}/{String(i + 1).padStart(2, '0')}</div>
+            <div style={{
+              fontFamily: '"Caveat", cursive', fontSize: 22, fontWeight: 700,
+              color: '#fff', lineHeight: 1,
+            }}>{s.cell}</div>
+            <div style={{
+              fontFamily: '"Patrick Hand", cursive', fontSize: 13,
+              color: '#fff', opacity: 0.85, marginTop: 4,
+            }}>{s.sub}</div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+Object.assign(window, { IsoCube, FlatNavGrid, EPOCHS, EPOCH_ORDER, pickCells });
+
+</script>
+<script type="text/babel">
+// «Хронос» — Hi-fi V8 «Ты» panel (fully interactive).
+// State lives in the parent's tweaks (key: `ty`) — every change persists.
+//
+//   ty = {
+//     birth: { y: 1994, m: 5, d: 16 },
+//     place: '',
+//     lifespan: 80,
+//     events: [ { label: 'школа', year: 2001 }, ... ],
+//   }
+
+const TY_DEFAULT = {
+  birth: { y: 1994, m: 5, d: 16 },
+  place: '',
+  lifespan: 80,
+  events: [
+    { label: 'школа',          year: 2001 },
+    { label: 'выпуск',         year: 2011 },
+    { label: 'первая работа',  year: 2016 },
+    { label: 'переезд',        year: 2020 },
+  ],
+};
+
+const TY_NOW_YEAR = 2026;
+
+// ── primitives ──────────────────────────────────────────────────────────
+
+function TyFieldLabel({ children, hint }) {
+  return (
+    <div style={{ marginBottom: 8 }}>
+      <div style={{
+        fontFamily: '"JetBrains Mono", monospace', fontSize: 10,
+        letterSpacing: 2, textTransform: 'uppercase',
+        color: 'rgba(245,243,237,0.5)',
+      }}>{children}</div>
+      {hint && (
+        <div style={{
+          fontFamily: '"DM Sans", sans-serif', fontSize: 11,
+          color: 'rgba(245,243,237,0.35)', marginTop: 3,
+          fontStyle: 'italic',
+        }}>{hint}</div>
+      )}
+    </div>
+  );
+}
+
+// Bounded integer stepper rendered inline.
+function NumStepper({ value, min, max, onChange, width = 50, pad = 0 }) {
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(String(value));
+  React.useEffect(() => { setDraft(String(value)); }, [value]);
+  const commit = () => {
+    let v = parseInt(draft, 10);
+    if (isNaN(v)) v = value;
+    v = Math.min(max, Math.max(min, v));
+    onChange(v);
+    setEditing(false);
+  };
+  const str = pad ? String(value).padStart(pad, '0') : String(value);
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={editing ? draft : str}
+      onFocus={() => { setEditing(true); setDraft(String(value)); }}
+      onBlur={commit}
+      onChange={(e) => setDraft(e.target.value.replace(/[^0-9-]/g, ''))}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { e.target.blur(); }
+        if (e.key === 'ArrowUp')   { e.preventDefault(); onChange(Math.min(max, value + 1)); }
+        if (e.key === 'ArrowDown') { e.preventDefault(); onChange(Math.max(min, value - 1)); }
+      }}
+      style={{
+        appearance: 'none',
+        width,
+        padding: '0 4px',
+        background: 'transparent',
+        border: 'none',
+        outline: 'none',
+        textAlign: 'center',
+        fontFamily: '"JetBrains Mono", monospace',
+        fontSize: 22, color: '#fff',
+        letterSpacing: 0.5,
+      }}
+    />
+  );
+}
+
+// ── Date ─────────────────────────────────────────────────────────────────
+
+function TyDate({ value, onChange, color }) {
+  // value: { y, m, d }
+  const daysInMonth = (y, m) => new Date(y, m, 0).getDate();
+  const maxD = daysInMonth(value.y, value.m);
+  const setField = (k, v) => onChange({ ...value, [k]: v });
+  return (
+    <div>
+      <TyFieldLabel hint="день · месяц · год">Дата рождения</TyFieldLabel>
+      <div style={{
+        display: 'inline-flex', alignItems: 'center',
+        padding: '8px 10px',
+        background: 'rgba(245,243,237,0.04)',
+        border: '1px solid rgba(245,243,237,0.18)',
+        borderRadius: 14,
+        gap: 4,
+      }}>
+        <NumStepper value={value.d} min={1} max={maxD} pad={2} width={40} onChange={(v) => setField('d', v)} />
+        <span style={{ opacity: 0.25, fontFamily: '"JetBrains Mono", monospace', fontSize: 22 }}>·</span>
+        <NumStepper value={value.m} min={1} max={12} pad={2} width={40} onChange={(v) => {
+          // adjust day if needed
+          const md = daysInMonth(value.y, v);
+          onChange({ ...value, m: v, d: Math.min(value.d, md) });
+        }} />
+        <span style={{ opacity: 0.25, fontFamily: '"JetBrains Mono", monospace', fontSize: 22 }}>·</span>
+        <NumStepper value={value.y} min={1900} max={TY_NOW_YEAR} pad={4} width={60} onChange={(v) => {
+          const md = daysInMonth(v, value.m);
+          onChange({ ...value, y: v, d: Math.min(value.d, md) });
+        }} />
+        <div style={{
+          marginLeft: 12, paddingLeft: 12,
+          borderLeft: '1px solid rgba(245,243,237,0.12)',
+          fontFamily: '"JetBrains Mono", monospace',
+          fontSize: 10, color,
+          textTransform: 'uppercase', letterSpacing: 1.5,
+        }}>{TY_NOW_YEAR - value.y} лет</div>
+      </div>
+    </div>
+  );
+}
+
+// ── Place ────────────────────────────────────────────────────────────────
+
+function TyPlace({ value, onChange }) {
+  return (
+    <div>
+      <TyFieldLabel hint="опционально · для локального контекста">Место рождения</TyFieldLabel>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="напр. Москва, Россия"
+        style={{
+          appearance: 'none',
+          width: '100%',
+          padding: '11px 16px',
+          background: 'rgba(245,243,237,0.04)',
+          border: '1px solid rgba(245,243,237,0.18)',
+          borderRadius: 10,
+          fontFamily: '"DM Sans", sans-serif',
+          fontSize: 14, color: '#fff',
+          outline: 'none',
+          transition: 'border-color 200ms',
+        }}
+        onFocus={(e) => e.currentTarget.style.borderColor = 'rgba(245,243,237,0.4)'}
+        onBlur={(e) => e.currentTarget.style.borderColor = 'rgba(245,243,237,0.18)'}
+      />
+    </div>
+  );
+}
+
+// ── Lifespan ─────────────────────────────────────────────────────────────
+
+function TyLifespan({ value, onChange, color, birthYear }) {
+  const min = 50, max = 110;
+  const frac = (value - min) / (max - min);
+  const trackRef = React.useRef(null);
+  const setFromClientX = (clientX) => {
+    const el = trackRef.current; if (!el) return;
+    const r = el.getBoundingClientRect();
+    const f = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+    onChange(Math.round(min + f * (max - min)));
+  };
+  const onPointerDown = (e) => {
+    e.preventDefault();
+    setFromClientX(e.clientX);
+    const move = (ev) => setFromClientX(ev.clientX);
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  const ageNow = TY_NOW_YEAR - birthYear;
+  const yearsLeft = value - ageNow;
+  return (
+    <div>
+      <TyFieldLabel hint="используется для пунктирной части линии «будущего»">Ожидаемая длина жизни</TyFieldLabel>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 18, marginTop: 4 }}>
+        <div
+          ref={trackRef}
+          onPointerDown={onPointerDown}
+          style={{
+            flex: 1, position: 'relative',
+            height: 22, padding: '8px 0',
+            cursor: 'pointer',
+            touchAction: 'none',
+          }}>
+          <div style={{
+            position: 'absolute', left: 0, right: 0, top: '50%',
+            height: 6, transform: 'translateY(-50%)',
+            background: 'rgba(245,243,237,0.08)',
+            borderRadius: 3,
+          }} />
+          <div style={{
+            position: 'absolute', left: 0, top: '50%',
+            width: `${frac * 100}%`, height: 6, transform: 'translateY(-50%)',
+            background: color, borderRadius: 3,
+            boxShadow: `0 0 12px ${color}88`,
+          }} />
+          <div style={{
+            position: 'absolute', left: `${frac * 100}%`, top: '50%',
+            width: 18, height: 18, borderRadius: '50%',
+            background: '#fff', transform: 'translate(-50%, -50%)',
+            boxShadow: `0 0 14px ${color}, 0 0 0 2px ${color}`,
+            cursor: 'grab',
+          }} />
+        </div>
+        <div style={{
+          fontFamily: '"Playfair Display", serif',
+          fontSize: 32, fontWeight: 700, color: '#fff',
+          minWidth: 90, textAlign: 'right',
+          lineHeight: 1,
+        }}>{value}<span style={{
+          fontFamily: '"JetBrains Mono", monospace',
+          fontSize: 10, fontWeight: 400, marginLeft: 5,
+          color: 'rgba(245,243,237,0.5)',
+        }}>лет</span></div>
+      </div>
+      <div style={{
+        marginTop: 10,
+        fontFamily: '"DM Sans", sans-serif', fontSize: 12,
+        color: 'rgba(245,243,237,0.55)',
+      }}>
+        прожито <span style={{ color: '#fff', fontWeight: 600 }}>{ageNow}</span>,
+        впереди <span style={{ color, fontWeight: 600 }}>{Math.max(0, yearsLeft)}</span> лет
+      </div>
+    </div>
+  );
+}
+
+// ── Events ───────────────────────────────────────────────────────────────
+
+function TyEvents({ events, onChange, birthYear, color }) {
+  const [adding, setAdding] = React.useState(false);
+  const [draftLabel, setDraftLabel] = React.useState('');
+  const [draftYear, setDraftYear]   = React.useState(TY_NOW_YEAR);
+
+  const updateEvent = (i, patch) => {
+    const next = events.map((e, j) => j === i ? { ...e, ...patch } : e);
+    onChange(next);
+  };
+  const removeEvent = (i) => {
+    onChange(events.filter((_, j) => j !== i));
+  };
+  const commitNew = () => {
+    const label = draftLabel.trim();
+    if (!label) { setAdding(false); return; }
+    onChange([...events, { label, year: draftYear }].sort((a, b) => a.year - b.year));
+    setDraftLabel(''); setDraftYear(TY_NOW_YEAR); setAdding(false);
+  };
+
+  return (
+    <div>
+      <TyFieldLabel hint="ключевые моменты твоей жизни · отметятся на главной линии">
+        Личные вехи
+      </TyFieldLabel>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {events.map((ev, i) => {
+          const age = ev.year - birthYear;
+          return (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 10,
+              padding: '8px 12px',
+              background: 'rgba(245,243,237,0.04)',
+              border: '1px solid rgba(245,243,237,0.10)',
+              borderRadius: 10,
+            }}>
+              <input
+                type="text"
+                value={ev.label}
+                onChange={(e) => updateEvent(i, { label: e.target.value })}
+                style={{
+                  appearance: 'none', flex: 1,
+                  background: 'transparent', border: 'none', outline: 'none',
+                  fontFamily: '"DM Sans", sans-serif',
+                  fontSize: 13, color: '#fff',
+                  padding: 0,
+                }}
+              />
+              <NumStepper value={ev.year} min={birthYear} max={birthYear + 110} pad={4} width={60}
+                onChange={(v) => updateEvent(i, { year: v })} />
+              <div style={{
+                fontFamily: '"JetBrains Mono", monospace', fontSize: 10,
+                color: 'rgba(245,243,237,0.4)', letterSpacing: 1,
+                minWidth: 36, textAlign: 'right',
+              }}>{age >= 0 ? `+${age}` : age} лет</div>
+              <button onClick={() => removeEvent(i)} style={{
+                appearance: 'none', background: 'transparent',
+                border: 'none', cursor: 'pointer',
+                color: 'rgba(245,243,237,0.35)', fontSize: 16,
+                padding: '0 4px', lineHeight: 0.8,
+              }} title="удалить">×</button>
+            </div>
+          );
+        })}
+
+        {adding ? (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '8px 12px',
+            background: `${color}14`,
+            border: `1px solid ${color}`,
+            borderRadius: 10,
+          }}>
+            <input
+              autoFocus
+              type="text"
+              value={draftLabel}
+              placeholder="что произошло"
+              onChange={(e) => setDraftLabel(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') commitNew(); if (e.key === 'Escape') setAdding(false); }}
+              style={{
+                appearance: 'none', flex: 1,
+                background: 'transparent', border: 'none', outline: 'none',
+                fontFamily: '"DM Sans", sans-serif',
+                fontSize: 13, color: '#fff',
+                padding: 0,
+              }}
+            />
+            <NumStepper value={draftYear} min={birthYear} max={birthYear + 110} pad={4} width={60}
+              onChange={setDraftYear} />
+            <button onClick={commitNew} style={{
+              appearance: 'none', cursor: 'pointer',
+              padding: '4px 10px', borderRadius: 8,
+              border: 'none', background: color, color: '#04040a',
+              fontFamily: '"DM Sans", sans-serif', fontSize: 11, fontWeight: 700,
+              letterSpacing: 0.3,
+            }}>+</button>
+            <button onClick={() => setAdding(false)} style={{
+              appearance: 'none', background: 'transparent',
+              border: 'none', cursor: 'pointer',
+              color: 'rgba(245,243,237,0.5)', fontSize: 16,
+              padding: '0 4px', lineHeight: 0.8,
+            }}>×</button>
+          </div>
+        ) : (
+          <button onClick={() => setAdding(true)} style={{
+            appearance: 'none', cursor: 'pointer',
+            padding: '10px 12px',
+            background: 'transparent',
+            border: '1px dashed rgba(245,243,237,0.22)',
+            borderRadius: 10,
+            color: 'rgba(245,243,237,0.55)',
+            fontFamily: '"DM Sans", sans-serif',
+            fontSize: 13, fontStyle: 'italic',
+            textAlign: 'left',
+          }}>+ добавить веху</button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Composite ────────────────────────────────────────────────────────────
+
+function TyFields({ value, onChange, color }) {
+  const v = { ...TY_DEFAULT, ...(value || {}) };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      <TyDate     value={v.birth}    color={color}
+        onChange={(birth) => onChange({ ...v, birth })} />
+      <TyPlace    value={v.place}
+        onChange={(place) => onChange({ ...v, place })} />
+      <TyLifespan value={v.lifespan} color={color} birthYear={v.birth.y}
+        onChange={(lifespan) => onChange({ ...v, lifespan })} />
+      <TyEvents   events={v.events}  color={color} birthYear={v.birth.y}
+        onChange={(events) => onChange({ ...v, events })} />
+    </div>
+  );
+}
+
+Object.assign(window, { TyFields, TY_DEFAULT, TY_NOW_YEAR });
+
+</script>
+<script type="text/babel">
+// «Хронос» — Hi-fi V7 face panel.
+// Per-face slide-over panel that opens when a satellite is clicked.
+// Each face has its own (skeletal) form. Hitting «готово» marks the face
+// ready; «отмена» closes without changing anything.
+
+// Face id (cube face name) → ui content.
+const FACE_PANEL_DEFS = {
+  front: {
+    label: 'Ты',
+    sub: 'дата · место · вехи · длина жизни',
+    color: null,        // takes user's epoch color
+    intro: 'Главная грань. С неё начинается вся лента: дата рождения задаёт твою эпоху и масштаб, личные события превратятся в тики на твоей жизни.',
+    fields: [
+      { type: 'date',  label: 'Дата рождения',  placeholder: '16 · 05 · 1994' },
+      { type: 'text',  label: 'Место рождения', placeholder: 'опционально · меняет локальный контекст' },
+      { type: 'slider', label: 'Ожидаемая длина жизни', value: 80, min: 50, max: 110, unit: 'лет' },
+      { type: 'events', label: 'Личные вехи', items: ['Школа · 2001', 'Выпуск · 2011', 'Первая работа · 2016', '+ добавить'] },
+    ],
+  },
+  top: {
+    label: 'Идеи',
+    sub: 'теории · открытия · законы',
+    color: '#22d3ee',
+    intro: 'Не вещи (это в «Изобретениях»), а мысли. Чем человечество объяснило мир: законы природы, философские системы, научные теории.',
+    fields: [
+      { type: 'multi', key: 'categories', label: 'Области интереса', items: ['Физика', 'Биология', 'Философия', 'Математика', 'Медицина', 'Психология'], defaultValue: ['Физика', 'Биология'] },
+      { type: 'count', key: 'count', label: 'Сколько ключевых идей показать', defaultValue: 7, min: 3, max: 20 },
+      { type: 'anchor', key: 'anchor', label: 'Перевернувшие твою картину мира', placeholder: 'напр. эволюция', defaultValue: ['Эволюция'], max: 3 },
+    ],
+  },
+  right: {
+    label: 'Современники',
+    sub: 'кто жил в твою эпоху',
+    color: '#4ade80',
+    intro: 'Люди, чьи жизни хотя бы на секунду пересекались с твоей. Можно отфильтровать по областям или закрепить «бенчмарки» — людей, рядом с которыми хочешь видеть свою линию.',
+    fields: [
+      { type: 'multi', key: 'categories', label: 'Области', items: ['Наука', 'Искусство', 'Политика', 'Спорт', 'Музыка', 'Технологии'], defaultValue: ['Наука', 'Музыка', 'Технологии'] },
+      { type: 'count', key: 'count', label: 'Сколько показать', defaultValue: 8, min: 0, max: 20 },
+      { type: 'anchor', key: 'anchor', label: 'Бенчмарки рядом с твоей линией', placeholder: 'имя · напр. Эйнштейн', defaultValue: ['С. Хокинг', 'Д. Боуи', 'С. Джобс'], max: 5 },
+    ],
+  },
+  left: {
+    label: 'Искусство',
+    sub: 'картины · музыка · литература',
+    color: '#f472b6',
+    intro: 'Произведения, изменившие культурный код: от «Илиады» до Pink Floyd. Каждая веха видна на ленте — сравни, что появилось до и после тебя.',
+    fields: [
+      { type: 'multi', key: 'categories', label: 'Медиумы', items: ['Живопись', 'Музыка', 'Литература', 'Архитектура', 'Кино', 'Театр'], defaultValue: ['Живопись', 'Музыка', 'Литература'] },
+      { type: 'count', key: 'count', label: 'Сколько произведений показать', defaultValue: 8, min: 3, max: 20 },
+      { type: 'anchor', key: 'anchor', label: 'Твоя личная полка', placeholder: 'книга · альбом · фильм', defaultValue: ['Dark Side · Pink Floyd', '«Мастер и Маргарита»'], max: 3 },
+    ],
+  },
+  back: {
+    label: 'Места',
+    sub: 'до сих пор стоят',
+    color: '#f59e8a',
+    intro: 'Постройки, до которых можно дотронуться сегодня. Колизей старше тебя на ~2000 лет — он всё ещё здесь. Эмоциональный мостик между эпохами.',
+    fields: [
+      { type: 'multi', key: 'categories', label: 'Тип', items: ['Храмы', 'Дворцы', 'Памятники', 'Города', 'Природные'], defaultValue: ['Храмы', 'Памятники'] },
+      { type: 'count', key: 'count', label: 'Сколько мест на ленте', defaultValue: 7, min: 3, max: 15 },
+      { type: 'anchor', key: 'anchor', label: 'Где был лично', placeholder: 'памятное место', defaultValue: ['Колизей', 'Эйфелева башня'], max: 5 },
+    ],
+  },
+  bottom: {
+    label: 'Изобретения',
+    sub: 'что уже было',
+    color: '#fbbf24',
+    intro: 'Вещи и технологии. Колесо появилось 5500 лет назад, iPhone — 19 лет. Поделим на «было до тебя» и «появилось при тебе».',
+    fields: [
+      { type: 'multi', key: 'categories', label: 'Категории', items: ['Транспорт', 'Связь', 'Медицина', 'Быт', 'Энергия', 'Цифровые'], defaultValue: ['Связь', 'Цифровые'] },
+      { type: 'count', key: 'count', label: 'Сколько изобретений показать', defaultValue: 10, min: 3, max: 25 },
+      { type: 'anchor', key: 'anchor', label: 'Без чего не можешь жить', placeholder: 'напр. интернет · кофемашина', defaultValue: ['Интернет'], max: 3 },
+    ],
+  },
+};
+
+// ── Field primitives ─────────────────────────────────────────────────────
+
+function FieldShell({ label, children }) {
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <div style={{
+        fontFamily: '"JetBrains Mono", monospace', fontSize: 10,
+        letterSpacing: 2, textTransform: 'uppercase',
+        color: 'rgba(245,243,237,0.5)', marginBottom: 8,
+      }}>{label}</div>
+      {children}
+    </div>
+  );
+}
+
+function FieldDate({ label, placeholder }) {
+  return (
+    <FieldShell label={label}>
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', gap: 12,
+        padding: '12px 18px',
+        background: 'rgba(245,243,237,0.04)',
+        border: '1px solid rgba(245,243,237,0.18)',
+        borderRadius: 999,
+        fontFamily: '"JetBrains Mono", monospace',
+        fontSize: 15, color: '#fff',
+      }}>
+        <span style={{ opacity: 0.55 }}>16</span>
+        <span style={{ opacity: 0.25 }}>·</span>
+        <span style={{ opacity: 0.55 }}>05</span>
+        <span style={{ opacity: 0.25 }}>·</span>
+        <span style={{ opacity: 0.55 }}>1994</span>
+      </div>
+    </FieldShell>
+  );
+}
+
+function FieldText({ label, placeholder }) {
+  return (
+    <FieldShell label={label}>
+      <div style={{
+        padding: '11px 16px',
+        background: 'rgba(245,243,237,0.04)',
+        border: '1px solid rgba(245,243,237,0.18)',
+        borderRadius: 8,
+        fontFamily: '"DM Sans", sans-serif',
+        fontSize: 14, color: 'rgba(245,243,237,0.4)',
+        fontStyle: 'italic',
+      }}>{placeholder}</div>
+    </FieldShell>
+  );
+}
+
+function FieldSlider({ label, value, min, max, unit, color }) {
+  const frac = (value - min) / (max - min);
+  return (
+    <FieldShell label={label}>
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 14,
+      }}>
+        <div style={{
+          flex: 1, position: 'relative',
+          height: 6, borderRadius: 3,
+          background: 'rgba(245,243,237,0.08)',
+        }}>
+          <div style={{
+            position: 'absolute', left: 0, top: 0, bottom: 0,
+            width: `${frac * 100}%`,
+            background: color, borderRadius: 3,
+            boxShadow: `0 0 10px ${color}88`,
+          }} />
+          <div style={{
+            position: 'absolute', left: `${frac * 100}%`, top: '50%',
+            width: 14, height: 14, borderRadius: '50%',
+            background: '#fff', transform: 'translate(-50%, -50%)',
+            boxShadow: `0 0 12px ${color}cc, 0 0 0 2px ${color}`,
+          }} />
+        </div>
+        <div style={{
+          fontFamily: '"Playfair Display", serif',
+          fontSize: 22, fontWeight: 700, color: '#fff',
+          minWidth: 60, textAlign: 'right',
+        }}>{value}<span style={{
+          fontFamily: '"JetBrains Mono", monospace',
+          fontSize: 10, fontWeight: 400, marginLeft: 5,
+          color: 'rgba(245,243,237,0.5)',
+        }}>{unit}</span></div>
+      </div>
+    </FieldShell>
+  );
+}
+
+function FieldMulti({ label, items, value, onChange, color }) {
+  const picked = value || [];
+  const toggle = (item) => {
+    if (picked.includes(item)) onChange(picked.filter((x) => x !== item));
+    else onChange([...picked, item]);
+  };
+  return (
+    <FieldShell label={label}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+        {items.map((item) => {
+          const on = picked.includes(item);
+          return (
+            <button key={item} type="button" onClick={() => toggle(item)} style={{
+              appearance: 'none', cursor: 'pointer',
+              padding: '7px 14px',
+              background: on ? `${color}26` : 'transparent',
+              border: `1px solid ${on ? color : 'rgba(245,243,237,0.18)'}`,
+              borderRadius: 999,
+              color: on ? '#fff' : 'rgba(245,243,237,0.7)',
+              fontFamily: '"DM Sans", sans-serif',
+              fontSize: 13, fontWeight: 500,
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              transition: 'all 180ms',
+            }}>
+              {on && <span style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: color, boxShadow: `0 0 6px ${color}`,
+              }} />}
+              {item}
+            </button>
+          );
+        })}
+      </div>
+    </FieldShell>
+  );
+}
+
+function FieldCount({ label, value, min, max, onChange, color }) {
+  const v = value != null ? value : min;
+  const dec = () => onChange(Math.max(min, v - 1));
+  const inc = () => onChange(Math.min(max, v + 1));
+  const frac = (v - min) / (max - min);
+  const trackRef = React.useRef(null);
+  const setFromClientX = (clientX) => {
+    const el = trackRef.current; if (!el) return;
+    const r = el.getBoundingClientRect();
+    const f = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
+    onChange(Math.round(min + f * (max - min)));
+  };
+  const onPointerDown = (e) => {
+    e.preventDefault(); setFromClientX(e.clientX);
+    const move = (ev) => setFromClientX(ev.clientX);
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  return (
+    <FieldShell label={label}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+        <button type="button" onClick={dec} disabled={v <= min} style={{
+          width: 32, height: 32, borderRadius: '50%',
+          background: 'rgba(245,243,237,0.06)',
+          border: '1px solid rgba(245,243,237,0.18)',
+          color: '#fff', fontSize: 18,
+          cursor: v <= min ? 'not-allowed' : 'pointer',
+          opacity: v <= min ? 0.4 : 1,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 0,
+        }}>−</button>
+        <div
+          ref={trackRef}
+          onPointerDown={onPointerDown}
+          style={{
+            flex: 1, position: 'relative', height: 18,
+            cursor: 'pointer', touchAction: 'none',
+          }}>
+          <div style={{
+            position: 'absolute', left: 0, right: 0, top: '50%',
+            height: 4, transform: 'translateY(-50%)',
+            background: 'rgba(245,243,237,0.08)', borderRadius: 2,
+          }} />
+          <div style={{
+            position: 'absolute', left: 0, top: '50%',
+            width: `${frac * 100}%`, height: 4, transform: 'translateY(-50%)',
+            background: color, borderRadius: 2,
+            boxShadow: `0 0 8px ${color}66`,
+          }} />
+          <div style={{
+            position: 'absolute', left: `${frac * 100}%`, top: '50%',
+            width: 14, height: 14, borderRadius: '50%',
+            background: '#fff', transform: 'translate(-50%, -50%)',
+            boxShadow: `0 0 10px ${color}, 0 0 0 2px ${color}`,
+          }} />
+        </div>
+        <button type="button" onClick={inc} disabled={v >= max} style={{
+          width: 32, height: 32, borderRadius: '50%',
+          background: 'rgba(245,243,237,0.06)',
+          border: '1px solid rgba(245,243,237,0.18)',
+          color: '#fff', fontSize: 18,
+          cursor: v >= max ? 'not-allowed' : 'pointer',
+          opacity: v >= max ? 0.4 : 1,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: 0,
+        }}>+</button>
+        <div style={{
+          fontFamily: '"Playfair Display", serif',
+          fontSize: 26, fontWeight: 700, color,
+          minWidth: 36, textAlign: 'right',
+        }}>{v}</div>
+      </div>
+    </FieldShell>
+  );
+}
+
+function FieldEvents({ label, items, color }) {
+  return (
+    <FieldShell label={label}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        {items.map((item, i) => {
+          const isAdd = item.startsWith('+');
+          return (
+            <div key={i} style={{
+              padding: '9px 14px',
+              background: isAdd ? 'transparent' : 'rgba(245,243,237,0.04)',
+              border: `1px ${isAdd ? 'dashed' : 'solid'} rgba(245,243,237,${isAdd ? '0.18' : '0.10'})`,
+              borderRadius: 8,
+              fontFamily: '"DM Sans", sans-serif',
+              fontSize: 13, color: isAdd ? color : '#fff',
+              fontWeight: isAdd ? 500 : 400,
+              cursor: isAdd ? 'pointer' : 'default',
+              display: 'flex', alignItems: 'center', gap: 10,
+            }}>
+              {!isAdd && <span style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: '#fff', opacity: 0.6,
+              }} />}
+              {item}
+            </div>
+          );
+        })}
+      </div>
+    </FieldShell>
+  );
+}
+
+function FieldAnchor({ label, placeholder, value, max, onChange, color }) {
+  const items = value || [];
+  const isFull = items.length >= (max || 99);
+  const [adding, setAdding] = React.useState(false);
+  const [draft, setDraft] = React.useState('');
+  const remove = (i) => onChange(items.filter((_, j) => j !== i));
+  const commit = () => {
+    const t = draft.trim();
+    if (!t) { setAdding(false); return; }
+    if (items.includes(t)) { setDraft(''); setAdding(false); return; }
+    onChange([...items, t]);
+    setDraft(''); setAdding(false);
+  };
+  return (
+    <div style={{
+      marginBottom: 22,
+      padding: '16px 18px',
+      background: `linear-gradient(135deg, ${color}10 0%, rgba(245,243,237,0.02) 100%)`,
+      border: `1px solid ${color}40`,
+      borderRadius: 12,
+      position: 'relative',
+    }}>
+      <div style={{
+        position: 'absolute', top: 14, right: 14,
+        fontSize: 14, color, opacity: 0.7,
+      }}>✦</div>
+      <div style={{
+        fontFamily: '"JetBrains Mono", monospace', fontSize: 10,
+        letterSpacing: 2, textTransform: 'uppercase',
+        color, marginBottom: 4,
+      }}>якорь</div>
+      <div style={{
+        fontFamily: '"DM Sans", sans-serif', fontSize: 14,
+        color: 'rgba(245,243,237,0.85)', marginBottom: 12,
+        lineHeight: 1.3,
+      }}>{label}</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+        {items.map((item, i) => (
+          <div key={i} style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '6px 6px 6px 12px',
+            background: `${color}26`,
+            border: `1px solid ${color}`,
+            borderRadius: 999,
+            fontFamily: '"DM Sans", sans-serif',
+            fontSize: 13, fontWeight: 600, color: '#fff',
+          }}>
+            {item}
+            <button onClick={() => remove(i)} style={{
+              appearance: 'none', background: 'transparent', border: 'none',
+              cursor: 'pointer', opacity: 0.6,
+              padding: '0 4px', fontSize: 16, lineHeight: 0.7,
+              color: '#fff',
+            }} title="убрать">×</button>
+          </div>
+        ))}
+        {adding && !isFull && (
+          <div style={{
+            display: 'inline-flex', alignItems: 'center', gap: 4,
+            padding: '4px 6px 4px 10px',
+            background: `${color}26`,
+            border: `1px solid ${color}`,
+            borderRadius: 999,
+          }}>
+            <input
+              autoFocus
+              type="text"
+              value={draft}
+              placeholder={placeholder}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setDraft(''); setAdding(false); } }}
+              onBlur={commit}
+              style={{
+                appearance: 'none',
+                background: 'transparent', border: 'none', outline: 'none',
+                fontFamily: '"DM Sans", sans-serif',
+                fontSize: 13, fontWeight: 600, color: '#fff',
+                padding: '2px 0', minWidth: 140,
+              }}
+            />
+          </div>
+        )}
+        {!adding && !isFull && (
+          <button onClick={() => setAdding(true)} type="button" style={{
+            appearance: 'none',
+            display: 'inline-flex', alignItems: 'center',
+            padding: '7px 12px',
+            background: 'transparent',
+            border: '1px dashed rgba(245,243,237,0.25)',
+            borderRadius: 999,
+            fontFamily: '"DM Sans", sans-serif',
+            fontSize: 13, color: 'rgba(245,243,237,0.55)',
+            fontStyle: 'italic',
+            cursor: 'pointer',
+          }}>+ {placeholder}</button>
+        )}
+      </div>
+      {max > 1 && (
+        <div style={{
+          marginTop: 10,
+          fontFamily: '"JetBrains Mono", monospace', fontSize: 9,
+          color: 'rgba(245,243,237,0.4)', letterSpacing: 1,
+        }}>{items.length} · макс {max}</div>
+      )}
+    </div>
+  );
+}
+
+function FieldRouter({ field, value, onChange, color }) {
+  switch (field.type) {
+    case 'date':   return <FieldDate label={field.label} placeholder={field.placeholder} />;
+    case 'text':   return <FieldText label={field.label} placeholder={field.placeholder} />;
+    case 'slider': return <FieldSlider label={field.label} value={field.value} min={field.min} max={field.max} unit={field.unit} color={color} />;
+    case 'multi':  return <FieldMulti label={field.label} items={field.items} value={value} onChange={onChange} color={color} />;
+    case 'count':  return <FieldCount label={field.label} value={value} min={field.min} max={field.max} onChange={onChange} color={color} />;
+    case 'events': return <FieldEvents label={field.label} items={field.items} color={color} />;
+    case 'anchor': return <FieldAnchor label={field.label} placeholder={field.placeholder} value={value} max={field.max} onChange={onChange} color={color} />;
+    default: return null;
+  }
+}
+
+// Compute initial value object per face from its field defaults.
+const FACE_DEFAULTS = Object.fromEntries(
+  Object.entries(FACE_PANEL_DEFS).map(([id, def]) => [
+    id,
+    Object.fromEntries((def.fields || [])
+      .filter((f) => f.key != null)
+      .map((f) => [f.key, f.defaultValue]))
+  ])
+);
+
+// ── Panel ────────────────────────────────────────────────────────────────
+
+function FacePanel({ faceId, epochColor, isReady, tyValue, onTyChange, faceValue, onFaceChange, onConfirm, onUnready, onCancel }) {
+  if (!faceId || !FACE_PANEL_DEFS[faceId]) return null;
+  const def = FACE_PANEL_DEFS[faceId];
+  const color = def.color || epochColor;
+
+  return (
+    <div style={{
+      position: 'relative',
+      maxWidth: 560,
+      background: 'rgba(10,10,20,0.66)',
+      border: '1px solid rgba(245,243,237,0.14)',
+      backdropFilter: 'blur(20px)',
+      WebkitBackdropFilter: 'blur(20px)',
+      borderRadius: 18,
+      padding: '30px 32px 24px',
+      boxShadow: `0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px ${color}22, 0 0 40px ${color}22`,
+    }}>
+      {/* Color stripe on the left */}
+      <div style={{
+        position: 'absolute', left: 0, top: 24, bottom: 24,
+        width: 3, background: color, borderRadius: 2,
+        boxShadow: `0 0 10px ${color}88`,
+      }} />
+
+      {/* Header */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+        gap: 16, marginBottom: 14,
+      }}>
+        <div>
+          <div style={{
+            fontFamily: '"JetBrains Mono", monospace', fontSize: 10,
+            letterSpacing: 2.5, color, textTransform: 'uppercase',
+            marginBottom: 6,
+          }}>грань · {faceId} {isReady ? '· готова' : ''}</div>
+          <h2 style={{
+            fontFamily: '"Playfair Display", serif',
+            fontSize: 42, fontWeight: 800, lineHeight: 1,
+            letterSpacing: -1.2, margin: 0,
+            color: '#fff',
+          }}>{def.label}</h2>
+          <div style={{
+            fontSize: 13, color: 'rgba(245,243,237,0.55)',
+            fontFamily: '"DM Sans", sans-serif',
+            marginTop: 6,
+          }}>{def.sub}</div>
+        </div>
+        <button onClick={onCancel} style={{
+          appearance: 'none', cursor: 'pointer',
+          width: 32, height: 32, borderRadius: '50%',
+          background: 'rgba(245,243,237,0.06)',
+          border: '1px solid rgba(245,243,237,0.14)',
+          color: 'rgba(245,243,237,0.7)',
+          fontSize: 18, padding: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
+        }} title="закрыть">×</button>
+      </div>
+
+      {/* Intro */}
+      <p style={{
+        fontSize: 14, lineHeight: 1.55,
+        color: 'rgba(245,243,237,0.72)',
+        margin: '0 0 24px',
+      }}>{def.intro}</p>
+
+      {/* Fields */}
+      <div>
+        {faceId === 'front' ? (
+          <TyFields value={tyValue} onChange={onTyChange} color={color} />
+        ) : (
+          def.fields.map((field, i) => {
+            const v = faceValue && field.key != null ? faceValue[field.key] : undefined;
+            const setFieldVal = (next) => {
+              if (!onFaceChange || field.key == null) return;
+              onFaceChange({ ...(faceValue || {}), [field.key]: next });
+            };
+            return (
+              <FieldRouter key={i} field={field} value={v} onChange={setFieldVal} color={color} />
+            );
+          })
+        )}
+      </div>
+
+      {/* Footer */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 12,
+        marginTop: 26, paddingTop: 22,
+        borderTop: '1px solid rgba(245,243,237,0.10)',
+      }}>
+        <button onClick={onConfirm} style={{
+          padding: '12px 26px',
+          background: color, color: '#04040a',
+          border: 'none', borderRadius: 999,
+          fontFamily: '"DM Sans", sans-serif',
+          fontSize: 14, fontWeight: 700,
+          letterSpacing: 0.3, cursor: 'pointer',
+          boxShadow: `0 0 0 1px ${color}, 0 10px 28px ${color}55`,
+        }}>{isReady ? 'обновить →' : 'готово →'}</button>
+        {isReady && (
+          <button onClick={onUnready} style={{
+            appearance: 'none', background: 'transparent', border: 'none',
+            padding: '12px 6px', cursor: 'pointer',
+            fontFamily: '"DM Sans", sans-serif', fontSize: 13,
+            color: 'rgba(245,243,237,0.55)',
+            textDecoration: 'underline', textUnderlineOffset: 4,
+            textDecorationColor: 'rgba(245,243,237,0.25)',
+          }}>снять отметку</button>
+        )}
+        <button onClick={onCancel} style={{
+          appearance: 'none', background: 'transparent', border: 'none',
+          marginLeft: 'auto',
+          padding: '12px 6px', cursor: 'pointer',
+          fontFamily: '"DM Sans", sans-serif', fontSize: 13,
+          color: 'rgba(245,243,237,0.5)',
+        }}>отмена</button>
+      </div>
+    </div>
+  );
+}
+
+// Face id → its dedicated colour (front uses epoch colour).
+const FACE_COLORS = {
+  front:  null,        // dynamic — user's epoch
+  top:    '#22d3ee',   // идеи
+  right:  '#4ade80',   // современники
+  left:   '#f472b6',   // искусство
+  back:   '#f59e8a',   // места
+  bottom: '#fbbf24',   // изобретения
+};
+
+Object.assign(window, { FacePanel, FACE_PANEL_DEFS, FACE_COLORS, FACE_DEFAULTS });
+
+</script>
+<script type="text/babel">
+// «Хронос» — Hi-fi V3 hero.
+// Dark cosmic landing with a real CSS-3D Rubik's cube, multi-layer parallax,
+// epoch-coloured satellites, editorial type and date entry.
+//
+// Reuses EPOCHS / EPOCH_ORDER / pickCells from cube.jsx.
+
+const HIFI_BG_DEEP = '#04040a';
+const HIFI_BG_BASE = '#0a0a14';
+const HIFI_INK     = '#f5f3ed';
+const HIFI_INK_DIM = 'rgba(245,243,237,0.7)';
+const HIFI_INK_FNT = 'rgba(245,243,237,0.42)';
+
+// ── Small helpers ───────────────────────────────────────────────────────
+
+function ProgressBar({ value, max, color }) {
+  const segments = [];
+  for (let i = 0; i < max; i++) {
+    const filled = i < value;
+    segments.push(
+      <div key={i} style={{
+        flex: 1,
+        height: 6,
+        background: filled ? color : 'rgba(245,243,237,0.08)',
+        borderRadius: 3,
+        boxShadow: filled ? `0 0 10px ${color}88` : 'none',
+        transition: 'background 320ms cubic-bezier(.3,.7,.3,1), box-shadow 320ms',
+      }} />,
+    );
+  }
+  return (
+    <div style={{ display: 'flex', gap: 5 }}>
+      {segments}
+    </div>
+  );
+}
+
+function pluralFaces(n) {
+  const last = n % 10;
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 14) return 'граней';
+  if (last === 1) return 'грань';
+  if (last >= 2 && last <= 4) return 'грани';
+  return 'граней';
+}
+
+// ── Hooks ────────────────────────────────────────────────────────────────
+
+function useMouseNorm() {
+  const [m, setM] = React.useState({ x: 0, y: 0 });
+  React.useEffect(() => {
+    const fn = (e) => {
+      const x = (e.clientX / window.innerWidth) * 2 - 1;
+      const y = (e.clientY / window.innerHeight) * 2 - 1;
+      setM({ x, y });
+    };
+    window.addEventListener('mousemove', fn);
+    return () => window.removeEventListener('mousemove', fn);
+  }, []);
+  return m;
+}
+
+function useTime() {
+  const [t, setT] = React.useState(0);
+  React.useEffect(() => {
+    let raf, t0;
+    const tick = (ts) => {
+      if (!t0) t0 = ts;
+      setT((ts - t0) / 1000);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  return t;
+}
+
+// ── Celestials ───────────────────────────────────────────────────────────
+
+function Galaxy({ x, y, w, h, rotate = 0, color, time, spin = 4 }) {
+  return (
+    <div style={{
+      position: 'absolute', left: x, top: y,
+      width: w, height: h,
+      transform: `translate(-50%, -50%) rotate(${(rotate + time * spin).toFixed(2)}deg)`,
+      pointerEvents: 'none',
+      mixBlendMode: 'screen',
+    }}>
+      {/* outer halo */}
+      <div style={{
+        position: 'absolute', inset: 0, borderRadius: '50%',
+        background: `radial-gradient(ellipse, ${color}55 0%, ${color}22 32%, transparent 68%)`,
+        filter: 'blur(24px)',
+      }} />
+      {/* spiral arms suggestion */}
+      <div style={{
+        position: 'absolute', inset: 0, borderRadius: '50%',
+        background:
+          `conic-gradient(from 0deg, transparent 0deg, ${color}88 50deg, transparent 130deg, ${color}55 220deg, transparent 290deg)`,
+        filter: 'blur(18px)',
+        opacity: 0.55,
+      }} />
+      {/* dust lane darker band */}
+      <div style={{
+        position: 'absolute', left: '50%', top: '50%',
+        width: w * 0.9, height: h * 0.08,
+        transform: 'translate(-50%, -50%)',
+        background: 'rgba(0,0,0,0.55)',
+        filter: 'blur(8px)',
+        borderRadius: '50%',
+        opacity: 0.4,
+      }} />
+      {/* bright core */}
+      <div style={{
+        position: 'absolute', left: '50%', top: '50%',
+        width: w * 0.22, height: h * 0.22,
+        transform: 'translate(-50%, -50%)',
+        background: `radial-gradient(circle, #fff 0%, ${color} 38%, transparent 80%)`,
+        filter: 'blur(6px)',
+        borderRadius: '50%',
+      }} />
+    </div>
+  );
+}
+
+function Planet({ x, y, size, baseColor, edgeColor, ring, ringColor, lightFrom = '30% 30%' }) {
+  return (
+    <div style={{
+      position: 'absolute', left: x, top: y,
+      transform: 'translate(-50%, -50%)',
+      pointerEvents: 'none',
+    }}>
+      {ring && (
+        <div style={{
+          position: 'absolute', left: '50%', top: '50%',
+          width: size * 2.4, height: size * 0.34,
+          transform: `translate(-50%, -50%) rotate(${ring}deg)`,
+          borderRadius: '50%',
+          background:
+            `linear-gradient(180deg, transparent 0%, transparent 44%, ${ringColor}aa 48%, ${ringColor}55 50%, ${ringColor}aa 52%, transparent 56%, transparent 100%)`,
+          boxShadow: `inset 0 0 0 1px ${ringColor}33`,
+          opacity: 0.85,
+        }} />
+      )}
+      <div style={{
+        width: size, height: size, borderRadius: '50%',
+        background: `radial-gradient(circle at ${lightFrom}, ${baseColor} 0%, ${edgeColor} 60%, #000 110%)`,
+        boxShadow: `0 0 28px ${baseColor}55, inset -6px -6px 20px rgba(0,0,0,0.7)`,
+      }} />
+      {/* tiny atmosphere edge */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        borderRadius: '50%',
+        boxShadow: `inset 0 0 0 1px ${baseColor}55`,
+      }} />
+    </div>
+  );
+}
+
+function Sun({ x, y, size = 90, color = '#ffe5a3' }) {
+  return (
+    <div style={{
+      position: 'absolute', left: x, top: y,
+      transform: 'translate(-50%, -50%)',
+      pointerEvents: 'none',
+    }}>
+      {/* far corona */}
+      <div style={{
+        position: 'absolute', left: '50%', top: '50%',
+        width: size * 7, height: size * 7,
+        transform: 'translate(-50%, -50%)',
+        background: `radial-gradient(circle, ${color}26 0%, ${color}0d 35%, transparent 65%)`,
+        borderRadius: '50%',
+        filter: 'blur(30px)',
+      }} />
+      {/* mid corona */}
+      <div style={{
+        position: 'absolute', left: '50%', top: '50%',
+        width: size * 3.2, height: size * 3.2,
+        transform: 'translate(-50%, -50%)',
+        background: `radial-gradient(circle, ${color}88 0%, ${color}44 38%, transparent 72%)`,
+        borderRadius: '50%',
+        filter: 'blur(14px)',
+      }} />
+      {/* lens flare */}
+      <div style={{
+        position: 'absolute', left: '50%', top: '50%',
+        width: size * 9, height: 1,
+        transform: 'translate(-50%, -50%)',
+        background: `linear-gradient(90deg, transparent 0%, ${color}aa 50%, transparent 100%)`,
+        opacity: 0.45, filter: 'blur(1.5px)',
+      }} />
+      <div style={{
+        position: 'absolute', left: '50%', top: '50%',
+        width: 1, height: size * 7,
+        transform: 'translate(-50%, -50%)',
+        background: `linear-gradient(180deg, transparent 0%, ${color}aa 50%, transparent 100%)`,
+        opacity: 0.4, filter: 'blur(1.5px)',
+      }} />
+      {/* disc */}
+      <div style={{
+        width: size, height: size, borderRadius: '50%',
+        background: `radial-gradient(circle, #fff 0%, ${color} 55%, ${color}cc 100%)`,
+        boxShadow: `0 0 36px ${color}, 0 0 90px ${color}aa`,
+      }} />
+    </div>
+  );
+}
+
+// ── Parallax background ──────────────────────────────────────────────────
+
+function ParallaxBG({ mouse, time, epoch }) {
+  const pal = EPOCHS[epoch].colors;
+
+  // Stars generated once, distributed across 3 depth layers, with tints.
+  const stars = React.useMemo(() => {
+    const tints = ['#ffffff', '#ffffff', '#ffffff', '#cfe2ff', '#fff0c8', '#ffd8e8', '#caf4ff'];
+    const arr = [];
+    for (let i = 0; i < 460; i++) {
+      arr.push({
+        x: Math.random() * 100,
+        y: Math.random() * 100,
+        r: 0.4 + Math.random() * 1.6,
+        o: 0.35 + Math.random() * 0.65,
+        depth: Math.random() > 0.82 ? 3 : Math.random() > 0.55 ? 2 : 1,
+        twinkle: Math.random() * Math.PI * 2,
+        tint: tints[Math.floor(Math.random() * tints.length)],
+      });
+    }
+    return arr;
+  }, []);
+
+  const off = (factor) => ({
+    transform: `translate3d(${(mouse.x * factor).toFixed(1)}px, ${(mouse.y * factor * 0.55).toFixed(1)}px, 0)`,
+    transition: 'transform 600ms cubic-bezier(.2,.7,.2,1)',
+  });
+
+  return (
+    <div style={{
+      position: 'absolute', inset: 0, overflow: 'hidden',
+      pointerEvents: 'none',
+    }}>
+      {/* deepest gradient */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: `radial-gradient(ellipse at 62% 42%, ${HIFI_BG_BASE} 0%, ${HIFI_BG_DEEP} 70%)`,
+      }} />
+
+      {/* Sun — far behind, in upper-left zone */}
+      <div style={{ ...off(-4), position: 'absolute', inset: 0 }}>
+        <Sun x="18%" y="14%" size={70} color="#ffe5a3" />
+      </div>
+
+      {/* far stars layer */}
+      <div style={{ ...off(-7), position: 'absolute', inset: -40 }}>
+        {stars.filter((s) => s.depth === 1).map((s, i) => (
+          <div key={i} style={{
+            position: 'absolute', left: `${s.x}%`, top: `${s.y}%`,
+            width: s.r, height: s.r, borderRadius: '50%',
+            background: s.tint, opacity: s.o * 0.7,
+          }} />
+        ))}
+      </div>
+
+      {/* Galaxy 1 — upper-right, drifts slowly */}
+      <div style={{ ...off(-14), position: 'absolute', inset: 0 }}>
+        <Galaxy x="86%" y="14%" w={420} h={300}
+                rotate={-18} time={time} spin={0.8}
+                color="#d18bff" />
+      </div>
+
+      {/* nebula blobs — epoch-coloured */}
+      <div style={{ ...off(-22), position: 'absolute', inset: 0 }}>
+        {[
+          { x: '18%', y: '40%', r: 700, c: pal[0] },
+          { x: '74%', y: '30%', r: 580, c: pal[1] || pal[0] },
+          { x: '52%', y: '88%', r: 820, c: pal[2] || pal[0] },
+          { x: '92%', y: '72%', r: 540, c: pal[3] || pal[0] },
+        ].map((b, i) => (
+          <div key={i} style={{
+            position: 'absolute', left: b.x, top: b.y,
+            width: b.r, height: b.r,
+            background: `radial-gradient(circle, ${b.c}55 0%, transparent 60%)`,
+            transform: 'translate(-50%, -50%)',
+            filter: 'blur(50px)',
+            mixBlendMode: 'screen',
+            opacity: 0.55,
+          }} />
+        ))}
+      </div>
+
+      {/* mid stars */}
+      <div style={{ ...off(-18), position: 'absolute', inset: -40 }}>
+        {stars.filter((s) => s.depth === 2).map((s, i) => {
+          const tw = 0.55 + Math.sin(time * 1.3 + s.twinkle) * 0.3;
+          return (
+            <div key={i} style={{
+              position: 'absolute', left: `${s.x}%`, top: `${s.y}%`,
+              width: s.r * 1.3, height: s.r * 1.3, borderRadius: '50%',
+              background: s.tint, opacity: s.o * tw,
+              boxShadow: `0 0 ${s.r * 4}px ${s.tint}aa`,
+            }} />
+          );
+        })}
+      </div>
+
+      {/* Galaxy 2 — lower-left */}
+      <div style={{ ...off(-26), position: 'absolute', inset: 0 }}>
+        <Galaxy x="11%" y="80%" w={340} h={240}
+                rotate={28} time={time} spin={-0.5}
+                color="#4fbfd9" />
+      </div>
+
+      {/* Planet — Saturn-like, upper-right zone, behind cube */}
+      <div style={{ ...off(-30), position: 'absolute', inset: 0 }}>
+        <Planet x="94%" y="32%" size={56}
+                baseColor="#e7c489" edgeColor="#7a5530"
+                ring={-22} ringColor="#f4d49a"
+                lightFrom="28% 28%" />
+      </div>
+
+      {/* near stars — twinkle harder, biggest, with glow */}
+      <div style={{ ...off(-34), position: 'absolute', inset: -40 }}>
+        {stars.filter((s) => s.depth === 3).map((s, i) => {
+          const tw = 0.5 + Math.sin(time * 2.0 + s.twinkle) * 0.5;
+          return (
+            <div key={i} style={{
+              position: 'absolute', left: `${s.x}%`, top: `${s.y}%`,
+              width: s.r * 2, height: s.r * 2, borderRadius: '50%',
+              background: s.tint, opacity: s.o * tw,
+              boxShadow: `0 0 ${s.r * 7}px ${s.tint}, 0 0 ${s.r * 14}px ${s.tint}66`,
+            }} />
+          );
+        })}
+      </div>
+
+      {/* Planet — small ice-blue, lower-left */}
+      <div style={{ ...off(-42), position: 'absolute', inset: 0 }}>
+        <Planet x="6%" y="62%" size={32}
+                baseColor="#9ccfff" edgeColor="#1f3a66"
+                lightFrom="35% 30%" />
+      </div>
+
+      {/* Planet — rusty mars, mid-bottom-right */}
+      <div style={{ ...off(-48), position: 'absolute', inset: 0 }}>
+        <Planet x="76%" y="86%" size={42}
+                baseColor="#e07852" edgeColor="#3a1a10"
+                lightFrom="30% 32%" />
+      </div>
+
+      {/* orbit rings — very faint, behind cube area */}
+      <div style={{
+        ...off(-52), position: 'absolute', inset: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+      }}>
+        {[440, 660, 900, 1140].map((r, i) => (
+          <div key={i} style={{
+            position: 'absolute',
+            width: r * 2, height: r * 1.55,
+            border: `1px solid rgba(255,255,255,${0.025 + i * 0.012})`,
+            borderRadius: '50%',
+            transform: `rotate(${i * 6 - 8}deg)`,
+          }} />
+        ))}
+      </div>
+
+      {/* vignette — bring focus to center */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: 'radial-gradient(ellipse at center, transparent 0%, transparent 50%, rgba(0,0,0,0.55) 100%)',
+      }} />
+    </div>
+  );
+}
+
+// ── CSS 3D Cube ──────────────────────────────────────────────────────────
+
+function CubeCell({ color, highlighted }) {
+  return (
+    <div style={{
+      position: 'relative',
+      borderRadius: 9,
+      background: color,
+      boxShadow: highlighted
+        ? `inset 0 0 0 1px rgba(255,255,255,.22), inset 0 1px 0 rgba(255,255,255,.25), 0 0 22px ${color}cc`
+        : `inset 0 0 0 1px rgba(255,255,255,.07), inset 0 1px 0 rgba(255,255,255,.18), inset 0 -1px 0 rgba(0,0,0,.32)`,
+      overflow: 'hidden',
+      transition: 'box-shadow 280ms ease',
+    }}>
+      <div style={{
+        position: 'absolute', inset: 0,
+        background:
+          'linear-gradient(135deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0) 38%, rgba(0,0,0,0) 62%, rgba(0,0,0,0.22) 100%)',
+        pointerEvents: 'none',
+      }} />
+    </div>
+  );
+}
+
+function CubeFace({ size, transform, colors, dim, highlighted, name, onEnter, onLeave, ready, readyColor }) {
+  return (
+    <div
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+      style={{
+        position: 'absolute', width: size, height: size,
+        transform,
+        backfaceVisibility: 'hidden',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gridTemplateRows: 'repeat(3, 1fr)',
+        gap: 6,
+        padding: 7,
+        background: '#03030a',
+        boxSizing: 'border-box',
+        opacity: dim ? 0.45 : 1,
+        transition: 'opacity 320ms ease',
+        boxShadow: highlighted
+          ? `0 0 80px ${(ready ? readyColor : colors[4])}77, inset 0 0 0 1px rgba(255,255,255,0.12)`
+          : ready
+            ? `0 0 28px ${readyColor}33, inset 0 0 0 1px rgba(255,255,255,0.08)`
+            : 'inset 0 0 0 1px rgba(255,255,255,0.04)',
+        cursor: 'pointer',
+      }}>
+      {colors.map((c, i) => (
+        <CubeCell key={i} color={c} highlighted={highlighted} />
+      ))}
+    </div>
+  );
+}
+
+// Target orientation per face — rotation needed to present that face to camera.
+// We keep a small tilt so the face still reads as 3D, not a flat square.
+const FACE_TARGET_ROT = {
+  front:  { x: -10, y:   -6 },
+  back:   { x: -10, y:  186 },
+  right:  { x: -10, y:  -90 },
+  left:   { x: -10, y:   90 },
+  top:    { x: -82, y:  -10 },
+  bottom: { x:  78, y:  -10 },
+};
+
+function Cube3D({ size = 420, mouse, time, epoch, hoveredFace, onHover, readyFaces }) {
+  // Base orientation: front-top-right are visible at rotateX(-22), rotateY(-28)
+  const wobX = Math.sin(time * 0.36) * 2.5;
+  const wobY = Math.cos(time * 0.28) * 5;
+
+  // When a satellite/face is hovered we lock onto its target orientation
+  // (no wobble, no mouse parallax) so the user can actually look at it.
+  let rotX, rotY;
+  if (hoveredFace && FACE_TARGET_ROT[hoveredFace]) {
+    rotX = FACE_TARGET_ROT[hoveredFace].x;
+    rotY = FACE_TARGET_ROT[hoveredFace].y;
+  } else {
+    rotX = -22 + wobX + mouse.y * 6;
+    rotY = -28 + wobY + mouse.x * 12;
+  }
+
+  const half = size / 2;
+  const accent = EPOCHS[epoch].colors[0];
+
+  // Map sections to faces.
+  // In V4 each satellite owns ONE face — 6 satellites, 6 faces, 1:1.
+  //   front  → Начало (вход)
+  //   top    → Твоя секунда (взгляд сверху на масштаб)
+  //   right  → Линия жизни (всегда движение вправо — будущее)
+  //   left   → Современники (контекст слева)
+  //   back   → Эпохи (раскручиваем «назад» во времени)
+  //   bottom → Изобретения (фундамент, на чём всё стоит)
+  // Каждая грань помечена своей эпохой — чтобы в «разобранном» состоянии
+  // куб читался как радуга времени. В assembled-режиме все грани заливаются
+  // цветом активной эпохи.
+  const FACES = [
+    { name: 'front',  e: 'contemporary', transform: `translateZ(${half}px)`,                  seed: 11 },
+    { name: 'top',    e: 'ancient',      transform: `rotateX(90deg)  translateZ(${half}px)`, seed: 22 },
+    { name: 'right',  e: epoch,          transform: `rotateY(90deg)  translateZ(${half}px)`, seed: 33 },
+    { name: 'left',   e: 'renaissance',  transform: `rotateY(-90deg) translateZ(${half}px)`, seed: 44 },
+    { name: 'back',   e: 'medieval',     transform: `rotateY(180deg) translateZ(${half}px)`, seed: 55 },
+    { name: 'bottom', e: 'modern',       transform: `rotateX(-90deg) translateZ(${half}px)`, seed: 66 },
+  ];
+
+  return (
+    <div style={{
+      perspective: 2400, perspectiveOrigin: '50% 50%',
+      width: size, height: size, position: 'relative',
+    }}>
+      {/* glow puddle below */}
+      <div style={{
+        position: 'absolute', left: '50%', top: '85%',
+        width: size * 1.4, height: size * 0.3,
+        transform: 'translate(-50%, -50%)',
+        background: `radial-gradient(ellipse, ${accent}66 0%, transparent 65%)`,
+        filter: 'blur(28px)',
+        pointerEvents: 'none', zIndex: -1,
+      }} />
+      {/* halo */}
+      <div style={{
+        position: 'absolute', inset: -size * 0.4,
+        background: `radial-gradient(circle, ${accent}38 0%, transparent 55%)`,
+        filter: 'blur(50px)',
+        pointerEvents: 'none', zIndex: -1,
+      }} />
+
+      <div style={{
+        position: 'absolute', inset: 0,
+        transformStyle: 'preserve-3d',
+        transform: `rotateX(${rotX.toFixed(2)}deg) rotateY(${rotY.toFixed(2)}deg)`,
+        transition: hoveredFace
+          ? 'transform 720ms cubic-bezier(.22,.85,.25,1)'
+          : 'transform 1200ms cubic-bezier(.22,.85,.25,1)',
+      }}>
+        {FACES.map((f) => {
+          const isReady = readyFaces && readyFaces.has(f.name);
+          const baseColors = pickCells(f.e, f.seed);
+          // Per-face ready colour: each face has its OWN dedicated colour
+          // (matches its lane on the unfolded timeline). The front face
+          // (Ты) uses the user's epoch colour.
+          const faceReadyColor = FACE_COLORS[f.name] || accent;
+          const colors = isReady ? baseColors.map(() => faceReadyColor) : baseColors;
+          return (
+            <CubeFace
+              key={f.name}
+              size={size}
+              transform={f.transform}
+              colors={colors}
+              dim={hoveredFace && hoveredFace !== f.name}
+              highlighted={hoveredFace === f.name}
+              name={f.name}
+              ready={isReady}
+              readyColor={faceReadyColor}
+              onEnter={() => onHover(f.name)}
+              onLeave={() => onHover(null)}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Satellites ───────────────────────────────────────────────────────────
+
+function Satellites({ epoch, hoveredFace, onHover, readyFaces, onClickFace, activeFace }) {
+  // 6 satellites, 6 faces, 1:1. Each face has its OWN colour (its lane on
+  // the unfolded timeline). Click opens that face's panel.
+  const epochAccent = EPOCHS[epoch].colors[0];
+  const colorFor = (face) => FACE_COLORS[face] || epochAccent;
+  const sats = [
+    { ang: -100, label: 'Ты',           sub: 'дата · место · вехи',      face: 'front'  },
+    { ang: -160, label: 'Идеи',         sub: 'теории и открытия',        face: 'top'    },
+    { ang:  -40, label: 'Искусство',    sub: 'картины · музыка · текст', face: 'left'   },
+    { ang:   20, label: 'Современники', sub: 'кто жил рядом',            face: 'right'  },
+    { ang:  100, label: 'Места',        sub: 'до сих пор стоят',         face: 'back'   },
+    { ang:  160, label: 'Изобретения',  sub: 'что уже было',             face: 'bottom' },
+  ];
+  const R = 360;
+
+  return (
+    <>
+      {sats.map((s, i) => {
+        const hovered = hoveredFace === s.face;
+        const isReady = readyFaces && readyFaces.has(s.face);
+        const isActive = activeFace === s.face;
+        const c = colorFor(s.face);
+        const rad = (s.ang * Math.PI) / 180;
+        const x = Math.cos(rad) * R;
+        const y = Math.sin(rad) * R * 0.62;
+        const borderC = isReady ? c : 'rgba(245,243,237,0.18)';
+        const bgGrad = isReady
+          ? `linear-gradient(135deg, ${c}33 0%, rgba(15,15,25,0.78) 100%)`
+          : 'rgba(15,15,25,0.55)';
+        return (
+          <div key={i}
+            onMouseEnter={() => onHover && onHover(s.face)}
+            onMouseLeave={() => onHover && onHover(null)}
+            onClick={() => onClickFace && onClickFace(s.face)}
+            style={{
+              position: 'absolute',
+              left: '50%', top: '50%',
+              transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px)) ${hovered || isActive ? 'scale(1.05)' : 'scale(1)'}`,
+              opacity: hoveredFace && !hovered ? 0.45 : 1,
+              transition: 'opacity 320ms ease, transform 320ms cubic-bezier(.3,.7,.3,1), box-shadow 320ms',
+              width: 188,
+              padding: '13px 15px',
+              background: bgGrad,
+              border: `1px solid ${isActive ? '#fff' : hovered ? c : borderC}`,
+              backdropFilter: 'blur(14px)',
+              WebkitBackdropFilter: 'blur(14px)',
+              borderRadius: 14,
+              boxShadow: isActive
+                ? `0 0 0 2px ${c}, 0 16px 48px ${c}55, inset 0 1px 0 rgba(255,255,255,0.08)`
+                : hovered
+                  ? `0 12px 40px ${c}44, inset 0 1px 0 rgba(255,255,255,0.06)`
+                  : isReady
+                    ? `0 10px 32px ${c}30, inset 0 1px 0 rgba(255,255,255,0.05)`
+                    : '0 8px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.04)',
+              zIndex: 3,
+              cursor: 'pointer',
+            }}>
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              marginBottom: 8, gap: 8,
+            }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                <span style={{
+                  width: 8, height: 8, borderRadius: '50%',
+                  background: isReady ? c : 'rgba(245,243,237,0.25)',
+                  boxShadow: isReady ? `0 0 10px ${c}` : 'none',
+                  transition: 'all 280ms',
+                }} />
+                <span style={{
+                  fontFamily: '"JetBrains Mono", monospace', fontSize: 9,
+                  letterSpacing: 1.5, color: HIFI_INK_FNT, textTransform: 'uppercase',
+                }}>{s.face}</span>
+              </div>
+              <span style={{
+                fontFamily: '"JetBrains Mono", monospace', fontSize: 8.5,
+                letterSpacing: 1.4, textTransform: 'uppercase',
+                padding: '3px 7px', borderRadius: 999,
+                color: isReady ? '#04040a' : 'rgba(245,243,237,0.55)',
+                background: isReady ? c : 'transparent',
+                border: isReady ? 'none' : '1px solid rgba(245,243,237,0.2)',
+                fontWeight: isReady ? 700 : 400,
+              }}>{isReady ? '✓ готова' : 'не готова'}</span>
+            </div>
+            <div style={{
+              fontFamily: '"Playfair Display", serif',
+              fontSize: 22, fontWeight: 700, color: '#fff',
+              lineHeight: 1, marginBottom: 4,
+            }}>{s.label}</div>
+            <div style={{
+              fontSize: 13, color: HIFI_INK_DIM,
+              fontFamily: '"DM Sans", sans-serif',
+            }}>{s.sub}</div>
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+// ── Composition pieces ───────────────────────────────────────────────────
+
+function TopBar() {
+  return (
+    <header style={{
+      position: 'absolute', top: 36, left: 60, right: 60,
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      zIndex: 10,
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'baseline', gap: 14,
+      }}>
+        <div style={{
+          fontFamily: '"Playfair Display", serif',
+          fontSize: 30, fontWeight: 800, letterSpacing: -1.2,
+          color: HIFI_INK,
+        }}>Хронос</div>
+        <div style={{
+          fontFamily: '"JetBrains Mono", monospace', fontSize: 10,
+          letterSpacing: 2.5, color: HIFI_INK_FNT, textTransform: 'uppercase',
+        }}>/ chronos · v0.3</div>
+      </div>
+      <nav style={{
+        display: 'flex', gap: 36, fontSize: 14,
+        fontFamily: '"DM Sans", sans-serif',
+        color: HIFI_INK_DIM, fontWeight: 400,
+      }}>
+        {['эпохи', 'современники', 'линия жизни', 'о проекте'].map((s) => (
+          <a key={s} style={{
+            color: 'inherit', textDecoration: 'none', cursor: 'pointer',
+            transition: 'color 200ms',
+          }}
+             onMouseEnter={(e) => e.currentTarget.style.color = HIFI_INK}
+             onMouseLeave={(e) => e.currentTarget.style.color = HIFI_INK_DIM}
+          >{s}</a>
+        ))}
+      </nav>
+    </header>
+  );
+}
+
+function DateInput({ accent }) {
+  return (
+    <div style={{
+      display: 'inline-flex', alignItems: 'center', gap: 14,
+      padding: '14px 22px',
+      background: 'rgba(245,243,237,0.04)',
+      border: '1px solid rgba(245,243,237,0.16)',
+      borderRadius: 999,
+      fontFamily: '"JetBrains Mono", monospace',
+      fontSize: 15, color: '#fff',
+      transition: 'border-color 200ms, background 200ms',
+    }}>
+      <span style={{ opacity: 0.55 }}>16</span>
+      <span style={{ opacity: 0.25 }}>·</span>
+      <span style={{ opacity: 0.55 }}>05</span>
+      <span style={{ opacity: 0.25 }}>·</span>
+      <span style={{ opacity: 0.55 }}>1994</span>
+      <span style={{
+        marginLeft: 8, paddingLeft: 14,
+        borderLeft: '1px solid rgba(245,243,237,0.12)',
+        fontFamily: '"DM Sans", sans-serif',
+        fontSize: 11, color: HIFI_INK_FNT,
+        textTransform: 'uppercase', letterSpacing: 2,
+      }}>дата рождения</span>
+    </div>
+  );
+}
+
+function EpochChip({ epoch, active, onClick }) {
+  const e = EPOCHS[epoch];
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        appearance: 'none', cursor: 'pointer',
+        padding: '6px 13px',
+        background: active ? `${e.colors[0]}26` : 'transparent',
+        border: `1px solid ${active ? e.colors[0] : 'rgba(245,243,237,0.18)'}`,
+        borderRadius: 999,
+        fontFamily: '"DM Sans", sans-serif',
+        fontSize: 13, fontWeight: 500,
+        color: active ? '#fff' : HIFI_INK_DIM,
+        display: 'inline-flex', alignItems: 'center', gap: 7,
+        transition: 'all 220ms',
+      }}>
+      <span style={{
+        width: 7, height: 7, borderRadius: '50%',
+        background: e.colors[0],
+        boxShadow: active ? `0 0 8px ${e.colors[0]}` : 'none',
+      }} />
+      {e.ru}
+    </button>
+  );
+}
+
+function BottomTimeline({ epoch, mouse }) {
+  const points = [
+    { x: 0.0,  label: '~3000 BCE', e: 'ancient' },
+    { x: 0.34, label: '500',       e: 'medieval' },
+    { x: 0.59, label: '1500',      e: 'renaissance' },
+    { x: 0.78, label: '1800',      e: 'modern' },
+    { x: 0.93, label: 'XX',        e: 'contemporary' },
+    { x: 1.0,  label: 'now',       e: 'contemporary' },
+  ];
+  return (
+    <div style={{
+      position: 'absolute', bottom: 42, left: 60, right: 60, height: 56,
+      zIndex: 5, transform: `translateX(${(mouse.x * -8).toFixed(1)}px)`,
+      transition: 'transform 500ms cubic-bezier(.2,.7,.2,1)',
+    }}>
+      <div style={{
+        position: 'absolute', left: 0, right: 0, top: 30, height: 1,
+        background: 'linear-gradient(90deg, transparent 0%, rgba(245,243,237,0.18) 10%, rgba(245,243,237,0.18) 90%, transparent 100%)',
+      }} />
+      {points.map((p, i) => {
+        const e = EPOCHS[p.e];
+        const active = p.e === epoch;
+        return (
+          <div key={i} style={{
+            position: 'absolute', left: `${p.x * 100}%`, top: 0,
+            transform: 'translateX(-50%)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+          }}>
+            <div style={{
+              fontFamily: '"JetBrains Mono", monospace', fontSize: 10,
+              color: active ? HIFI_INK : HIFI_INK_FNT,
+              letterSpacing: 1.4,
+              transition: 'color 280ms',
+            }}>{p.label}</div>
+            <div style={{
+              width: active ? 12 : 7, height: active ? 12 : 7, borderRadius: '50%',
+              background: e.colors[0],
+              boxShadow: active ? `0 0 18px ${e.colors[0]}, 0 0 4px ${e.colors[0]}` : 'none',
+              transition: 'all 320ms cubic-bezier(.3,.7,.3,1)',
+            }} />
+          </div>
+        );
+      })}
+      <div style={{
+        position: 'absolute', right: -10, bottom: 6,
+        fontFamily: '"DM Sans", sans-serif', fontSize: 11,
+        color: HIFI_INK_FNT, fontStyle: 'italic',
+      }}>5 000 лет в одной полосе ↑</div>
+    </div>
+  );
+}
+
+// ── Hero composition ─────────────────────────────────────────────────────
+
+// Left-column content shown when no face panel is open: title, copy,
+// readiness progress bar, primary CTA.
+function HeroIntro({ accent, readyCount, totalFaces, hasReady, allReady, onShowLines }) {
+  return (
+    <>
+      <div style={{
+        fontFamily: '"JetBrains Mono", monospace', fontSize: 11,
+        letterSpacing: 3, color: HIFI_INK_FNT,
+        textTransform: 'uppercase', marginBottom: 28,
+      }}>
+        <span style={{ color: accent }}>●</span>&nbsp;&nbsp;5000 лет · одна жизнь
+      </div>
+      <h1 style={{
+        fontFamily: '"Playfair Display", serif',
+        fontSize: 96, fontWeight: 900, lineHeight: 0.94,
+        letterSpacing: -3.2, margin: 0,
+        textWrap: 'pretty',
+      }}>
+        твоё&nbsp;место<br />
+        в&nbsp;<em style={{
+          fontStyle: 'italic', fontWeight: 400,
+          color: accent,
+          textShadow: `0 0 30px ${accent}55`,
+        }}>истории</em>
+      </h1>
+      <p style={{
+        fontSize: 18, lineHeight: 1.55,
+        color: HIFI_INK_DIM, margin: '28px 0 0',
+        maxWidth: 480,
+      }}>
+        Куб собирает шесть линий времени. Одна — <span style={{ color: '#fff' }}>твоя жизнь</span>.
+        Пять других — мир вокруг неё: идеи, искусство, изобретения, современники, места.
+        Заполни каждую грань — и куб развернётся в ленту.
+      </p>
+
+      {/* Readiness progress */}
+      <div style={{
+        marginTop: 40, padding: '20px 24px',
+        background: 'rgba(245,243,237,0.03)',
+        border: '1px solid rgba(245,243,237,0.10)',
+        borderRadius: 14,
+        maxWidth: 520,
+      }}>
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+          marginBottom: 14,
+        }}>
+          <div style={{
+            fontFamily: '"JetBrains Mono", monospace', fontSize: 10,
+            letterSpacing: 2.5, color: HIFI_INK_FNT, textTransform: 'uppercase',
+          }}>готовность куба</div>
+          <div style={{
+            fontFamily: '"Playfair Display", serif',
+            fontSize: 24, fontWeight: 700,
+            color: allReady ? accent : HIFI_INK,
+          }}>
+            {readyCount}<span style={{
+              fontSize: 16, color: HIFI_INK_FNT, fontWeight: 400,
+            }}> / {totalFaces}</span>
+          </div>
+        </div>
+        <ProgressBar value={readyCount} max={totalFaces} color={accent} />
+        <div style={{
+          marginTop: 12, fontSize: 12,
+          color: HIFI_INK_FNT,
+          fontFamily: '"DM Sans", sans-serif',
+          fontStyle: 'italic',
+        }}>
+          {readyCount === 0 && 'клик по грани — открой её и заполни данные'}
+          {readyCount > 0 && !allReady && `${totalFaces - readyCount} ${pluralFaces(totalFaces - readyCount)} ещё ждёт`}
+          {allReady && 'все шесть граней собраны — лента готова'}
+        </div>
+      </div>
+
+      <div style={{
+        marginTop: 28, display: 'flex', gap: 14, alignItems: 'center',
+        flexWrap: 'wrap',
+      }}>
+        <button
+          onClick={onShowLines}
+          disabled={!hasReady}
+          style={{
+            padding: '14px 30px',
+            background: hasReady ? accent : 'rgba(245,243,237,0.08)',
+            color: hasReady ? '#fff' : HIFI_INK_FNT,
+            border: 'none', borderRadius: 999,
+            fontFamily: '"DM Sans", sans-serif',
+            fontSize: 15, fontWeight: 600,
+            letterSpacing: 0.3,
+            cursor: hasReady ? 'pointer' : 'not-allowed',
+            boxShadow: hasReady
+              ? `0 0 0 1px ${accent}, 0 12px 32px ${accent}55`
+              : 'none',
+            transition: 'transform 200ms, box-shadow 200ms, background 200ms',
+          }}
+          onMouseEnter={(e) => {
+            if (!hasReady) return;
+            e.currentTarget.style.transform = 'translateY(-1px)';
+            e.currentTarget.style.boxShadow = `0 0 0 1px ${accent}, 0 18px 42px ${accent}77`;
+          }}
+          onMouseLeave={(e) => {
+            if (!hasReady) return;
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = `0 0 0 1px ${accent}, 0 12px 32px ${accent}55`;
+          }}
+        >показать линии →</button>
+        {hasReady && !allReady && (
+          <span style={{
+            fontSize: 12, color: HIFI_INK_FNT,
+            fontFamily: '"DM Sans", sans-serif',
+            fontStyle: 'italic',
+          }}>
+            можно и сейчас — но чем больше граней, тем богаче лента
+          </span>
+        )}
+      </div>
+    </>
+  );
+}
+
+function HiFiHero({ t, setTweak, toggleReady, setReady, ty, setTy, faceData, setFaceData }) {
+  // V5: if user expanded the cube into the unfolded timeline, switch views.
+  if (t.unfolded) {
+    return <UnfoldedTimeline epoch={t.epoch} laneOrder={t.laneOrder} setLaneOrder={(v) => setTweak('laneOrder', v)} onClose={() => setTweak('unfolded', false)} />;
+  }
+  const mouse = useMouseNorm();
+  const time = useTime();
+  const [hoveredFace, setHoveredFace] = React.useState(null);
+  const [activeFace, setActiveFace]   = React.useState(null);
+  const accent = EPOCHS[t.epoch].colors[0];
+  const readyFaces = new Set(t.ready || []);
+  const readyCount = readyFaces.size;
+  const totalFaces = 6;
+  const allReady = readyCount === totalFaces;
+  const hasReady = readyCount > 0;
+
+  // When a face panel is open we lock the cube onto that face (overrides hover).
+  const lockedFace = activeFace || hoveredFace;
+
+  const openFace = (face) => {
+    setActiveFace(face);
+    setHoveredFace(face);
+  };
+  const closeFace = () => {
+    setActiveFace(null);
+    setHoveredFace(null);
+  };
+  const confirmFace = () => {
+    if (activeFace) setReady(activeFace, true);
+    closeFace();
+  };
+  const unreadyFace = () => {
+    if (activeFace) setReady(activeFace, false);
+    closeFace();
+  };
+
+  return (
+    <div style={{
+      position: 'relative',
+      width: '100%', minHeight: '100vh',
+      background: HIFI_BG_DEEP,
+      color: HIFI_INK,
+      overflow: 'hidden',
+      fontFamily: '"DM Sans", sans-serif',
+    }}>
+      <ParallaxBG mouse={mouse} time={time} epoch={t.epoch} />
+      <TopBar />
+
+      {/* Main grid */}
+      <div style={{
+        position: 'relative', zIndex: 4,
+        display: 'grid',
+        gridTemplateColumns: '5fr 7fr',
+        alignItems: 'center',
+        padding: '160px 60px 160px',
+        gap: 40,
+        minHeight: '100vh',
+        boxSizing: 'border-box',
+      }}>
+        {/* Left column — either hero copy + CTA or the active face panel */}
+        <div style={{ maxWidth: 560, position: 'relative' }}>
+          {activeFace ? (
+            <FacePanel
+              faceId={activeFace}
+              epochColor={accent}
+              isReady={readyFaces.has(activeFace)}
+              tyValue={ty}
+              onTyChange={setTy}
+              faceValue={(faceData || {})[activeFace]}
+              onFaceChange={(next) => setFaceData && setFaceData(activeFace, next)}
+              onConfirm={confirmFace}
+              onUnready={unreadyFace}
+              onCancel={closeFace}
+            />
+          ) : (
+            <HeroIntro
+              accent={accent}
+              readyCount={readyCount}
+              totalFaces={totalFaces}
+              hasReady={hasReady}
+              allReady={allReady}
+              onShowLines={() => hasReady && setTweak('unfolded', true)}
+            />
+          )}
+        </div>
+
+        {/* Right column — cube stage */}
+        <div style={{
+          position: 'relative',
+          width: '100%', height: 720,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            position: 'relative', width: 820, height: 820,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
+            <Satellites
+              epoch={t.epoch}
+              hoveredFace={lockedFace}
+              onHover={setHoveredFace}
+              readyFaces={readyFaces}
+              activeFace={activeFace}
+              onClickFace={openFace}
+            />
+            <Cube3D
+              size={400} mouse={mouse} time={time}
+              epoch={t.epoch}
+              readyFaces={readyFaces}
+              hoveredFace={lockedFace}
+              onHover={setHoveredFace}
+            />
+          </div>
+        </div>
+      </div>
+
+      <BottomTimeline epoch={t.epoch} mouse={mouse} />
+    </div>
+  );
+}
+
+Object.assign(window, { HiFiHero, HIFI_BG_DEEP, HIFI_BG_BASE, HIFI_INK, HIFI_INK_DIM, HIFI_INK_FNT });
+
+</script>
+<script type="text/babel">
+// «Хронос» — Hi-fi V5 unfolded timeline.
+// Куб развернулся в горизонтальную ленту. Нелинейная шкала: чем ближе к
+// «сейчас», тем шире — иначе личная жизнь схлопывается в точку. 7 дорожек:
+// эпохи (фон) · идеи · изобретения · искусство · ТЫ · современники · места.
+// Серое = база. Цветное = «выбрано на грани куба».
+
+// ── Data (placeholder, born 1994-05-16) ──────────────────────────────────
+
+const TL_BIRTH = 1994;
+const TL_NOW   = 2026;
+const TL_END   = 2074;
+
+// Marker shape: { y: year, label: string, sub?: string, picked?: bool, e?: epoch }
+// Lifeline shape: { y0, y1, label, sub?, picked?, e? }
+const TL_DATA = {
+  ideas: [
+    { y: -300, label: 'Геометрия Евклида' },
+    { y: 1543, label: 'Гелиоцентризм',     sub: 'Коперник' },
+    { y: 1687, label: 'Гравитация',        sub: 'Ньютон' },
+    { y: 1859, label: 'Эволюция',          sub: 'Дарвин',     picked: true, e: 'modern' },
+    { y: 1905, label: 'Относительность',   sub: 'Эйнштейн',   picked: true, e: 'contemporary' },
+    { y: 1925, label: 'Квантовая механика' },
+    { y: 1953, label: 'ДНК',               sub: 'Уотсон, Крик', picked: true, e: 'contemporary' },
+  ],
+  inventions: [
+    { y: -3500, label: 'Колесо' },
+    { y:   105, label: 'Бумага' },
+    { y:  1440, label: 'Книгопечатание' },
+    { y:  1769, label: 'Паровой двигатель' },
+    { y:  1879, label: 'Лампочка' },
+    { y:  1903, label: 'Самолёт' },
+    { y:  1969, label: 'Луна',    picked: true, e: 'contemporary' },
+    { y:  1983, label: 'Интернет', picked: true, e: 'contemporary' },
+    { y:  2007, label: 'iPhone',   picked: true, e: 'contemporary' },
+    { y:  2022, label: 'GPT',      picked: true, e: 'contemporary' },
+  ],
+  art: [
+    { y: -750, label: '«Илиада»',        sub: 'Гомер' },
+    { y: 1512, label: '«Сотворение Адама»', sub: 'Микеланджело' },
+    { y: 1601, label: '«Гамлет»',        sub: 'Шекспир' },
+    { y: 1824, label: 'Симфония №9',     sub: 'Бетховен' },
+    { y: 1869, label: '«Война и мир»',   sub: 'Толстой' },
+    { y: 1889, label: '«Звёздная ночь»', sub: 'Ван Гог', picked: true, e: 'modern' },
+    { y: 1973, label: '«Dark Side»',     sub: 'Pink Floyd', picked: true, e: 'contemporary' },
+  ],
+  contemporaries: [
+    // Жизненные линии — y0/y1 = рождение/смерть (или now если жив)
+    { y0: 1931, y1: 2022, label: 'М. Горбачёв',   sub: 'политик' },
+    { y0: 1942, y1: 2018, label: 'С. Хокинг',     sub: 'физик',    picked: true, e: 'contemporary' },
+    { y0: 1947, y1: 2016, label: 'Д. Боуи',       sub: 'музыка',   picked: true, e: 'contemporary' },
+    { y0: 1955, y1: 2011, label: 'С. Джобс',      sub: 'технологии', picked: true, e: 'contemporary' },
+    { y0: 1958, y1: TL_NOW, label: 'Мадонна',     sub: 'музыка' },
+    { y0: 1971, y1: TL_NOW, label: 'И. Маск',     sub: 'технологии' },
+  ],
+  places: [
+    // Места — y0 = год основания, длятся до сегодня
+    { y0: -3000, y1: TL_NOW, label: 'Стоунхендж' },
+    { y0: -2600, y1: TL_NOW, label: 'Пирамиды Гизы', picked: true, e: 'ancient' },
+    { y0:  -440, y1: TL_NOW, label: 'Парфенон' },
+    { y0:    80, y1: TL_NOW, label: 'Колизей',        picked: true, e: 'ancient' },
+    { y0:  1248, y1: TL_NOW, label: 'Кёльнский собор' },
+    { y0:  1889, y1: TL_NOW, label: 'Эйфелева башня', picked: true, e: 'modern' },
+    { y0:  2010, y1: TL_NOW, label: 'Бурдж-Халифа' },
+  ],
+  // ТЫ — личные события
+  you: {
+    born: TL_BIRTH,
+    now:  TL_NOW,
+    end:  TL_END,
+    events: [
+      { y: 2000, label: 'школа' },
+      { y: 2011, label: 'выпуск' },
+      { y: 2016, label: 'первая работа' },
+      { y: 2020, label: 'переезд' },
+    ],
+  },
+};
+
+// Эпохи как фон
+const TL_EPOCHS_BG = [
+  { id: 'ancient',      y0: -3000, y1:  500 },
+  { id: 'medieval',     y0:   500, y1: 1400 },
+  { id: 'renaissance',  y0:  1400, y1: 1650 },
+  { id: 'modern',       y0:  1650, y1: 1900 },
+  { id: 'contemporary', y0:  1900, y1: TL_END },
+];
+
+// ── Non-linear scale ────────────────────────────────────────────────────
+// Piecewise linear segments — each "era" gets equal visual share so the
+// last 150 years aren't a hair-thin sliver. Returns 0..1.
+const TL_YEAR_MIN = -3000;
+const TL_YEAR_MAX = TL_END;
+
+function tlYearToFrac(year) {
+  const stops = [
+    [TL_YEAR_MIN, 0.00],
+    [    0,       0.18],
+    [ 1500,       0.36],
+    [ 1900,       0.58],
+    [TL_BIRTH,    0.70],
+    [TL_NOW,      0.84],
+    [TL_YEAR_MAX, 1.00],
+  ];
+  if (year <= stops[0][0]) return 0;
+  if (year >= stops[stops.length - 1][0]) return 1;
+  for (let i = 0; i < stops.length - 1; i++) {
+    const [y0, f0] = stops[i];
+    const [y1, f1] = stops[i + 1];
+    if (year <= y1) {
+      return f0 + ((year - y0) / (y1 - y0)) * (f1 - f0);
+    }
+  }
+  return 1;
+}
+
+// Format a year as «1543» / «300 до н.э.»
+function tlFmtYear(y) {
+  if (y < 0) return `${-y} до н.э.`;
+  return String(y);
+}
+
+// ── Lane primitives ──────────────────────────────────────────────────────
+
+const LANE_H = 78;
+const TL_GRAY = 'rgba(180, 180, 195, 0.32)';
+const TL_GRAY_INK = 'rgba(220, 220, 230, 0.55)';
+const TL_INK = '#f5f3ed';
+
+// Per-lane palette — each lane gets its own dedicated colour, picked items
+// glow in their lane's colour. ТЫ is the special one — its colour comes from
+// the user's birth epoch.
+const TL_LANE_COLORS = {
+  ideas:          '#22d3ee', // cyan
+  inventions:     '#fbbf24', // amber
+  art:            '#f472b6', // pink
+  contemporaries: '#4ade80', // green
+  places:         '#f59e8a', // coral
+  // you → derived from epoch (passed in as prop)
+};
+
+const TL_LANE_DEFS = [
+  { id: 'ideas',          title: 'Идеи',         sub: 'теории · открытия',         type: 'markers',  dataKey: 'ideas' },
+  { id: 'inventions',     title: 'Изобретения',  sub: 'вещи · технологии',         type: 'markers',  dataKey: 'inventions' },
+  { id: 'art',            title: 'Искусство',    sub: 'картины · музыка · текст',  type: 'markers',  dataKey: 'art' },
+  { id: 'you',            title: 'ТЫ',           sub: 'это твоя жизнь',            type: 'self' },
+  { id: 'contemporaries', title: 'Современники', sub: 'кто жил рядом',             type: 'ranges',   dataKey: 'contemporaries' },
+  { id: 'places',         title: 'Места',        sub: 'до сих пор стоят',          type: 'ranges',   dataKey: 'places' },
+];
+
+const TL_LANE_BY_ID = Object.fromEntries(TL_LANE_DEFS.map((d) => [d.id, d]));
+
+function tlFmtFullYear(y) {
+  if (y < 0) return `${-y} до н.э.`;
+  return String(y);
+}
+
+// Greedy row packer — sorts items by start position and drops each into the
+// lowest row whose last item is at least `minGap` to the left (or to its
+// right edge for ranges). Mutates each item by writing `_row`.
+function packRows(items, getStart, getEnd, minGap) {
+  const sorted = items.map((it, _i) => ({ it, _i, x0: getStart(it), x1: getEnd ? getEnd(it) : getStart(it) }));
+  sorted.sort((a, b) => a.x0 - b.x0);
+  const lastX = [];
+  for (const s of sorted) {
+    let row = 0;
+    while (lastX[row] != null && s.x0 - lastX[row] < minGap) row++;
+    lastX[row] = s.x1;
+    s.it._row = row;
+  }
+  return Math.max(1, lastX.length);
+}
+
+// Pick a horizontal anchor for a label so the rightmost items don't get
+// clipped by the canvas edge.
+function labelAnchor(x) {
+  if (x > 0.92) return { right: 8, textAlign: 'right' };
+  return { left: 8, textAlign: 'left' };
+}
+
+// Generic floating tooltip — sibling of the marker; revealed via CSS when
+// the .tl-marker / .tl-lifeline parent is hovered.
+function Tooltip({ x, children }) {
+  // Flip horizontally near canvas edges so it doesn't get clipped.
+  let transform;
+  if (x > 0.85) transform = 'translate(-100%, calc(-100% - 14px))';
+  else if (x < 0.08) transform = 'translate(0, calc(-100% - 14px))';
+  else transform = 'translate(-50%, calc(-100% - 14px))';
+  return (
+    <div className="tl-tip" style={{
+      position: 'absolute',
+      left: 0, top: '50%',
+      transform,
+      padding: '10px 14px',
+      background: 'rgba(10,10,20,0.96)',
+      border: '1px solid rgba(255,255,255,0.16)',
+      borderRadius: 8,
+      minWidth: 140, maxWidth: 260,
+      pointerEvents: 'none',
+      opacity: 0,
+      transition: 'opacity 180ms ease',
+      zIndex: 50,
+      boxShadow: '0 14px 36px rgba(0,0,0,0.7)',
+      whiteSpace: 'normal',
+    }}>
+      {children}
+    </div>
+  );
+}
+
+function MarkerDot({ x, label, sub, picked, color, row = 0, year, onHoverChange }) {
+  // All markers wear their lane's colour now; picked ones just have stronger
+  // presence (full opacity + glow + bold label).
+  const c = color;
+  const dotOpacity = picked ? 1 : 0.5;
+  const ink = picked ? '#fff' : 'rgba(220,220,230,0.65)';
+  // Alternate rows above/below the dot. Row 0 = just above, row 1 = just
+  // below, row 2 = higher, row 3 = lower, etc.
+  const dir = row % 2 === 0 ? -1 : 1;
+  const tier = Math.floor(row / 2);
+  const labelOffsetY = dir * (20 + tier * 38);
+  const anchor = labelAnchor(x);
+  return (
+    <div className="tl-marker" style={{
+      position: 'absolute',
+      left: `${x * 100}%`,
+      top: 0, bottom: 0,
+      width: 1,
+      pointerEvents: 'auto',
+    }}
+      onMouseEnter={() => onHoverChange && onHoverChange({ x, year, color, label, sub })}
+      onMouseLeave={() => onHoverChange && onHoverChange(null)}
+    >
+      {/* hit area (invisible) for hover detection */}
+      <div style={{
+        position: 'absolute',
+        left: -12, top: '50%', transform: 'translateY(-50%)',
+        width: 24, height: 24,
+        cursor: 'help',
+      }} />
+      {/* dot */}
+      <div style={{
+        position: 'absolute',
+        left: -4, top: '50%', transform: 'translateY(-50%)',
+        width: 8, height: 8, borderRadius: '50%',
+        background: c,
+        opacity: dotOpacity,
+        boxShadow: picked ? `0 0 12px ${color}aa, 0 0 3px ${color}` : 'none',
+        pointerEvents: 'none',
+      }} />
+      {/* leader line from dot to label */}
+      <div style={{
+        position: 'absolute',
+        left: 0,
+        top: dir > 0 ? 'calc(50% + 4px)' : `calc(50% - ${Math.abs(labelOffsetY)}px)`,
+        width: 1, height: Math.abs(labelOffsetY) - 4,
+        background: picked ? `${color}55` : `${color}22`,
+        pointerEvents: 'none',
+      }} />
+      {/* label */}
+      <div style={{
+        position: 'absolute',
+        ...anchor,
+        top: `calc(50% + ${labelOffsetY}px)`,
+        transform: dir > 0 ? 'translateY(0)' : 'translateY(-100%)',
+        fontFamily: '"DM Sans", sans-serif',
+        fontSize: picked ? 12 : 10,
+        fontWeight: picked ? 600 : 400,
+        color: ink,
+        whiteSpace: 'nowrap',
+        lineHeight: 1.15,
+        pointerEvents: 'none',
+      }}>
+        <div>{label}</div>
+        {sub && (
+          <div style={{
+            fontFamily: '"JetBrains Mono", monospace',
+            fontSize: 8.5, opacity: 0.55,
+            marginTop: 1, letterSpacing: 0.5,
+          }}>{sub}</div>
+        )}
+      </div>
+      {/* tooltip */}
+      <Tooltip x={x}>
+        <div style={{ fontWeight: 600, fontSize: 13, color: '#fff' }}>{label}</div>
+        {sub && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>{sub}</div>}
+        <div style={{
+          marginTop: 6, paddingTop: 6,
+          borderTop: '1px solid rgba(255,255,255,0.12)',
+          fontFamily: '"JetBrains Mono", monospace',
+          fontSize: 11, color, letterSpacing: 0.5,
+        }}>{tlFmtFullYear(year)}</div>
+      </Tooltip>
+    </div>
+  );
+}
+
+function LifelineBar({ x0, x1, label, sub, picked, color, row = 0, y0, y1, onHoverChange }) {
+  const c = color;
+  const barOpacity = picked ? 1 : 0.45;
+  const ink = picked ? '#fff' : 'rgba(220,220,230,0.65)';
+  // Each row stacks vertically. Bar centered on its row; label sits above.
+  const rowStep = 28;
+  const topPx = 18 + row * rowStep;
+  const anchor = labelAnchor(x0);
+  // Year range string for tooltip.
+  const isAlive = y1 >= TL_NOW;
+  const rangeStr = `${tlFmtFullYear(y0)} – ${isAlive ? 'сейчас' : tlFmtFullYear(y1)}`;
+  const lifespanYears = (isAlive ? TL_NOW : y1) - y0;
+  return (
+    <div className="tl-lifeline" style={{
+      position: 'absolute',
+      left: `${x0 * 100}%`,
+      width: `${(x1 - x0) * 100}%`,
+      top: topPx,
+      height: 14,
+      pointerEvents: 'auto',
+      cursor: 'help',
+    }}
+      onMouseEnter={() => onHoverChange && onHoverChange({ x: (x0 + x1) / 2, year: y0, color, label, sub, range: [y0, y1] })}
+      onMouseLeave={() => onHoverChange && onHoverChange(null)}
+    >
+      <div style={{
+        position: 'absolute', left: 0, right: 0, top: '50%',
+        height: 3, transform: 'translateY(-50%)',
+        background: c,
+        opacity: barOpacity,
+        borderRadius: 2,
+        boxShadow: picked ? `0 0 8px ${color}80` : 'none',
+        pointerEvents: 'none',
+      }} />
+      <div style={{
+        position: 'absolute', left: -3, top: '50%',
+        width: 7, height: 7, borderRadius: '50%',
+        background: c, opacity: barOpacity,
+        transform: 'translateY(-50%)',
+        pointerEvents: 'none',
+      }} />
+      <div style={{
+        position: 'absolute', right: -3, top: '50%',
+        width: 7, height: 7, borderRadius: '50%',
+        background: c, opacity: barOpacity,
+        transform: 'translateY(-50%)',
+        pointerEvents: 'none',
+      }} />
+      <div style={{
+        position: 'absolute',
+        ...anchor,
+        top: -14,
+        fontFamily: '"DM Sans", sans-serif',
+        fontSize: picked ? 11 : 10,
+        fontWeight: picked ? 600 : 400,
+        color: ink,
+        whiteSpace: 'nowrap',
+        lineHeight: 1.1,
+        pointerEvents: 'none',
+      }}>
+        {label}
+        {sub && (
+          <span style={{
+            fontFamily: '"JetBrains Mono", monospace',
+            fontSize: 8.5, opacity: 0.55,
+            marginLeft: 5, letterSpacing: 0.5,
+          }}>· {sub}</span>
+        )}
+      </div>
+      <Tooltip x={(x0 + x1) / 2}>
+        <div style={{ fontWeight: 600, fontSize: 13, color: '#fff' }}>{label}</div>
+        {sub && <div style={{ fontSize: 11, color: 'rgba(255,255,255,0.6)', marginTop: 2 }}>{sub}</div>}
+        <div style={{
+          marginTop: 6, paddingTop: 6,
+          borderTop: '1px solid rgba(255,255,255,0.12)',
+          fontFamily: '"JetBrains Mono", monospace',
+          fontSize: 11, color, letterSpacing: 0.4,
+        }}>{rangeStr}</div>
+        <div style={{
+          fontFamily: '"DM Sans", sans-serif',
+          fontSize: 10, color: 'rgba(255,255,255,0.5)', marginTop: 3,
+        }}>{lifespanYears} лет {isAlive ? '(жив)' : ''}</div>
+      </Tooltip>
+    </div>
+  );
+}
+
+function LaneRow({ title, sub, count, color, children, height = LANE_H, draggable, dragging, dropTarget, onDragStart, onDragOver, onDragEnd, onDrop }) {
+  return (
+    <div
+      draggable={draggable}
+      onDragStart={onDragStart}
+      onDragOver={onDragOver}
+      onDragEnd={onDragEnd}
+      onDrop={onDrop}
+      style={{
+        position: 'relative',
+        height,
+        borderTop: '1px dashed rgba(245,243,237,0.07)',
+        display: 'flex',
+        opacity: dragging ? 0.4 : 1,
+        background: dropTarget ? 'rgba(245,243,237,0.04)' : 'transparent',
+        transition: 'opacity 200ms, background 160ms',
+      }}>
+      <div style={{
+        flex: '0 0 160px',
+        padding: '12px 18px 0 12px',
+        textAlign: 'right',
+        borderRight: '1px solid rgba(245,243,237,0.08)',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 8,
+        position: 'relative',
+      }}>
+        {/* drag handle */}
+        <div style={{
+          fontFamily: '"JetBrains Mono", monospace',
+          fontSize: 14, lineHeight: 1,
+          color: 'rgba(245,243,237,0.25)',
+          paddingTop: 4,
+          cursor: 'grab',
+          userSelect: 'none',
+        }} title="перетащить полосу">⋮⋮</div>
+        {/* accent color chip */}
+        {color && (
+          <div style={{
+            width: 3, alignSelf: 'stretch',
+            background: color,
+            borderRadius: 2,
+            boxShadow: `0 0 6px ${color}66`,
+          }} />
+        )}
+        <div style={{ flex: 1, textAlign: 'right' }}>
+          <div style={{
+            fontFamily: '"Playfair Display", serif',
+            fontSize: 18, fontWeight: 700, color: TL_INK,
+            lineHeight: 1,
+          }}>{title}</div>
+          <div style={{
+            fontFamily: '"JetBrains Mono", monospace',
+            fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase',
+            color: 'rgba(245,243,237,0.4)',
+            marginTop: 6,
+          }}>{sub}{count != null ? ` · ${count}` : ''}</div>
+        </div>
+      </div>
+      <div style={{
+        position: 'relative', flex: 1,
+        overflow: 'visible',
+      }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+// ── Main ─────────────────────────────────────────────────────────────────
+
+function UnfoldedTimeline({ epoch, onClose, laneOrder, setLaneOrder }) {
+  const accent = EPOCHS[epoch].colors[0];
+  const order = (laneOrder && laneOrder.length === TL_LANE_DEFS.length)
+    ? laneOrder
+    : TL_LANE_DEFS.map((d) => d.id);
+
+  // Year ticks for the bottom ruler
+  const tlTicks = [-3000, -1000, 0, 500, 1000, 1500, 1700, 1850, 1950, 2000, TL_NOW, TL_END];
+
+  const youX0   = tlYearToFrac(TL_DATA.you.born);
+  const youXNow = tlYearToFrac(TL_DATA.you.now);
+  const youXEnd = tlYearToFrac(TL_DATA.you.end);
+
+  // Per-lane colour — ТЫ uses the epoch accent, others use their dedicated hue.
+  const laneColor = (id) => id === 'you' ? accent : TL_LANE_COLORS[id];
+
+  // Pack rows per lane (resolve label collisions).
+  const MARKER_GAP = 0.105;
+  const RANGE_GAP  = 0.006;
+  const packedRows = {
+    ideas:          packRows(TL_DATA.ideas,          d => tlYearToFrac(d.y),  null,                       MARKER_GAP),
+    inventions:     packRows(TL_DATA.inventions,     d => tlYearToFrac(d.y),  null,                       MARKER_GAP),
+    art:            packRows(TL_DATA.art,            d => tlYearToFrac(d.y),  null,                       MARKER_GAP),
+    contemporaries: packRows(TL_DATA.contemporaries, d => tlYearToFrac(d.y0), d => tlYearToFrac(d.y1),    RANGE_GAP),
+    places:         packRows(TL_DATA.places,         d => tlYearToFrac(d.y0), d => tlYearToFrac(d.y1),    RANGE_GAP),
+  };
+
+  const markerLaneH = (rows) => 72 + Math.ceil(rows / 2) * 76;
+  const rangeLaneH  = (rows) => 28 + rows * 28;
+
+  // Drag-to-reorder state
+  const [dragId, setDragId]   = React.useState(null);
+  const [overId, setOverId]   = React.useState(null);
+
+  // Hover guide — vertical line that follows the currently hovered
+  // marker / lifeline / event across every lane.
+  const [hoverInfo, setHoverInfo] = React.useState(null);
+  // 3D hover for epoch bands
+  const [hoveredEpoch, setHoveredEpoch] = React.useState(null);
+
+  const onDragStart = (id) => (e) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', id);
+    setDragId(id);
+  };
+  const onDragOver = (id) => (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (overId !== id) setOverId(id);
+  };
+  const onDragEnd = () => { setDragId(null); setOverId(null); };
+  const onDrop = (id) => (e) => {
+    e.preventDefault();
+    const fromId = dragId || e.dataTransfer.getData('text/plain');
+    if (!fromId || fromId === id) { onDragEnd(); return; }
+    const next = [...order];
+    const fromIdx = next.indexOf(fromId);
+    const toIdx = next.indexOf(id);
+    if (fromIdx < 0 || toIdx < 0) { onDragEnd(); return; }
+    next.splice(fromIdx, 1);
+    next.splice(toIdx, 0, fromId);
+    setLaneOrder && setLaneOrder(next);
+    onDragEnd();
+  };
+
+  // Render a single lane based on its definition.
+  const renderLane = (def) => {
+    const col = laneColor(def.id);
+    const isDragging = dragId === def.id;
+    const isOver = overId === def.id && dragId && dragId !== def.id;
+    const dragProps = {
+      draggable: true,
+      dragging: isDragging,
+      dropTarget: isOver,
+      onDragStart: onDragStart(def.id),
+      onDragOver: onDragOver(def.id),
+      onDragEnd,
+      onDrop: onDrop(def.id),
+    };
+
+    if (def.type === 'markers') {
+      const items = TL_DATA[def.dataKey];
+      const pickedN = items.filter((d) => d.picked).length;
+      return (
+        <LaneRow
+          key={def.id}
+          title={def.title} sub={def.sub}
+          count={`${pickedN}/${items.length}`}
+          color={col}
+          height={markerLaneH(packedRows[def.id])}
+          {...dragProps}
+        >
+          {TL_DATA[def.dataKey].map((d, i) => (
+            <MarkerDot key={i} x={tlYearToFrac(d.y)} year={d.y}
+              label={d.label} sub={d.sub}
+              picked={d.picked} color={col} row={d._row || 0}
+              onHoverChange={setHoverInfo} />
+          ))}
+        </LaneRow>
+      );
+    }
+
+    if (def.type === 'ranges') {
+      const items = TL_DATA[def.dataKey];
+      const pickedN = items.filter((d) => d.picked).length;
+      return (
+        <LaneRow
+          key={def.id}
+          title={def.title} sub={def.sub}
+          count={`${pickedN}/${items.length}`}
+          color={col}
+          height={rangeLaneH(packedRows[def.id])}
+          {...dragProps}
+        >
+          {TL_DATA[def.dataKey].map((d, i) => (
+            <LifelineBar key={i}
+              x0={tlYearToFrac(d.y0)} x1={tlYearToFrac(d.y1)}
+              y0={d.y0} y1={d.y1}
+              label={d.label} sub={d.sub}
+              picked={d.picked} color={col}
+              row={d._row || 0}
+              onHoverChange={setHoverInfo}
+            />
+          ))}
+        </LaneRow>
+      );
+    }
+
+    if (def.type === 'self') {
+      return (
+        <LaneRow
+          key={def.id}
+          title={def.title} sub={def.sub}
+          color={col}
+          height={LANE_H + 56}
+          {...dragProps}
+        >
+          {/* Жизнь — основная линия */}
+          <div style={{
+            position: 'absolute',
+            left: `${youX0 * 100}%`, width: `${(youXNow - youX0) * 100}%`,
+            top: '50%', height: 7, transform: 'translateY(-50%)',
+            background: col,
+            borderRadius: 4,
+            boxShadow: `0 0 24px ${col}99, 0 0 4px ${col}`,
+          }} />
+          <div style={{
+            position: 'absolute',
+            left: `${youXNow * 100}%`, width: `${(youXEnd - youXNow) * 100}%`,
+            top: '50%', height: 7, transform: 'translateY(-50%)',
+            background: `repeating-linear-gradient(90deg, ${col}aa 0 8px, transparent 8px 14px)`,
+            borderRadius: 4,
+            opacity: 0.7,
+          }} />
+          {/* Маркеры рождения / сейчас / конца */}
+          {[
+            { x: youX0,   label: 'рождение', y: TL_BIRTH },
+            { x: youXNow, label: 'сейчас',   y: TL_NOW,   marker: true },
+            { x: youXEnd, label: 'конец',    y: TL_END,   dashed: true },
+          ].map((m, i) => (
+            <div key={i} className="tl-marker" style={{
+              position: 'absolute', left: `${m.x * 100}%`, top: 0, bottom: 0, width: 1,
+              pointerEvents: 'auto',
+            }}
+              onMouseEnter={() => setHoverInfo({ x: m.x, year: m.y, color: col, label: m.label })}
+              onMouseLeave={() => setHoverInfo(null)}
+            >
+              <div style={{
+                position: 'absolute',
+                left: -7, top: '50%', transform: 'translateY(-50%)',
+                width: 14, height: 14, borderRadius: '50%',
+                background: m.marker ? '#fff' : col,
+                border: `2px solid ${m.dashed ? 'transparent' : '#04040a'}`,
+                outline: m.dashed ? `2px dashed ${col}` : 'none',
+                boxShadow: `0 0 14px ${col}cc`,
+                pointerEvents: 'none',
+              }} />
+              <div style={{
+                position: 'absolute', left: -30, top: -6,
+                fontFamily: '"JetBrains Mono", monospace',
+                fontSize: 10, letterSpacing: 1.5,
+                color: 'rgba(245,243,237,0.85)',
+                whiteSpace: 'nowrap', textTransform: 'uppercase',
+                pointerEvents: 'none',
+              }}>{m.y}</div>
+              <div style={{
+                position: 'absolute', left: -30, bottom: -2,
+                fontFamily: '"Playfair Display", serif',
+                fontStyle: 'italic', fontSize: 14,
+                color: TL_INK,
+                whiteSpace: 'nowrap',
+                pointerEvents: 'none',
+              }}>{m.label}</div>
+              <Tooltip x={m.x}>
+                <div style={{ fontWeight: 600, fontSize: 13, color: '#fff' }}>{m.label}</div>
+                <div style={{
+                  marginTop: 6, paddingTop: 6,
+                  borderTop: '1px solid rgba(255,255,255,0.12)',
+                  fontFamily: '"JetBrains Mono", monospace',
+                  fontSize: 11, color: col, letterSpacing: 0.4,
+                }}>{m.y}</div>
+              </Tooltip>
+            </div>
+          ))}
+          {/* Личные события */}
+          {TL_DATA.you.events.map((ev, i) => {
+            const x = tlYearToFrac(ev.y);
+            return (
+              <div key={'e' + i} className="tl-marker" style={{
+                position: 'absolute', left: `${x * 100}%`, top: 0, bottom: 0, width: 1,
+                pointerEvents: 'auto',
+              }}
+                onMouseEnter={() => setHoverInfo({ x, year: ev.y, color: col, label: ev.label, sub: `+${ev.y - TL_BIRTH} лет` })}
+                onMouseLeave={() => setHoverInfo(null)}
+              >
+                <div style={{
+                  position: 'absolute', left: -1, top: '50%',
+                  width: 2, height: 22, transform: 'translateY(-50%)',
+                  background: '#fff', opacity: 0.8,
+                  pointerEvents: 'none',
+                }} />
+                <div style={{
+                  position: 'absolute',
+                  left: 4, top: 'calc(50% + 14px)',
+                  transform: 'rotate(35deg)',
+                  transformOrigin: 'left top',
+                  fontFamily: '"DM Sans", sans-serif',
+                  fontSize: 11, color: 'rgba(245,243,237,0.78)',
+                  whiteSpace: 'nowrap',
+                  letterSpacing: 0.2,
+                  pointerEvents: 'none',
+                }}>{ev.label} <span style={{
+                  fontFamily: '"JetBrains Mono", monospace',
+                  fontSize: 9, opacity: 0.55, marginLeft: 4,
+                }}>{ev.y}</span></div>
+                <Tooltip x={x}>
+                  <div style={{ fontWeight: 600, fontSize: 13, color: '#fff' }}>{ev.label}</div>
+                  <div style={{
+                    marginTop: 6, paddingTop: 6,
+                    borderTop: '1px solid rgba(255,255,255,0.12)',
+                    fontFamily: '"JetBrains Mono", monospace',
+                    fontSize: 11, color: col, letterSpacing: 0.4,
+                  }}>{ev.y} · {ev.y - TL_BIRTH} лет</div>
+                </Tooltip>
+              </div>
+            );
+          })}
+        </LaneRow>
+      );
+    }
+    return null;
+  };
+
+  return (
+    <div style={{
+      position: 'relative',
+      width: '100%', minHeight: '100vh',
+      background: HIFI_BG_DEEP,
+      color: HIFI_INK,
+      overflow: 'hidden',
+      fontFamily: '"DM Sans", sans-serif',
+      padding: '0 0 60px',
+    }}>
+      {/* CSS for hover tooltips */}
+      <style>{`
+        .tl-marker:hover .tl-tip,
+        .tl-lifeline:hover .tl-tip {
+          opacity: 1 !important;
+        }
+      `}</style>
+
+      {/* atmospheric BG */}
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: `radial-gradient(ellipse at 75% 40%, ${accent}18 0%, transparent 55%), radial-gradient(ellipse at 10% 80%, #2d4a8a14 0%, transparent 60%)`,
+        pointerEvents: 'none',
+      }} />
+
+      {/* Header */}
+      <header style={{
+        position: 'relative', zIndex: 5,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+        padding: '40px 60px 28px',
+      }}>
+        <div>
+          <div style={{
+            fontFamily: '"JetBrains Mono", monospace', fontSize: 11,
+            letterSpacing: 3, color: HIFI_INK_FNT,
+            textTransform: 'uppercase', marginBottom: 12,
+          }}>
+            <span style={{ color: accent }}>●</span>&nbsp;&nbsp;развёртка · {tlFmtYear(TL_YEAR_MIN)} → {tlFmtYear(TL_YEAR_MAX)}
+          </div>
+          <h1 style={{
+            fontFamily: '"Playfair Display", serif',
+            fontSize: 56, fontWeight: 800, lineHeight: 0.95,
+            letterSpacing: -1.8, margin: 0,
+          }}>
+            твоя&nbsp;линия&nbsp;жизни <em style={{
+              fontStyle: 'italic', fontWeight: 400, color: accent,
+            }}>в&nbsp;истории</em>
+          </h1>
+          <div style={{
+            marginTop: 14, fontSize: 14, color: HIFI_INK_DIM,
+            display: 'flex', gap: 22,
+            fontFamily: '"JetBrains Mono", monospace',
+            letterSpacing: 1,
+          }}>
+            <span>16·05·1994 → 2074</span>
+            <span>·</span>
+            <span>80 лет из 5 074</span>
+            <span>·</span>
+            <span>{((TL_NOW - TL_BIRTH) / 80 * 100).toFixed(0)}% прожито</span>
+          </div>
+        </div>
+
+        <button
+          onClick={onClose}
+          style={{
+            padding: '10px 18px',
+            background: 'rgba(245,243,237,0.06)',
+            color: TL_INK,
+            border: '1px solid rgba(245,243,237,0.18)',
+            borderRadius: 999,
+            fontFamily: '"DM Sans", sans-serif',
+            fontSize: 13, fontWeight: 500,
+            cursor: 'pointer',
+            letterSpacing: 0.3,
+          }}
+        >← к кубику</button>
+      </header>
+
+      {/* Timeline canvas */}
+      <div style={{
+        position: 'relative', zIndex: 4,
+        margin: '0 60px',
+        background: 'rgba(255,255,255,0.015)',
+        border: '1px solid rgba(245,243,237,0.06)',
+        borderRadius: 12,
+      }}>
+        {/* Epoch background bands — interactive, lift on hover */}
+        <div style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          marginLeft: 160,
+          overflow: 'hidden',
+          borderTopRightRadius: 12,
+          perspective: 1600,
+          zIndex: 1,
+        }}>
+          {TL_EPOCHS_BG.map((e, i) => {
+            const x0 = tlYearToFrac(e.y0);
+            const x1 = tlYearToFrac(e.y1);
+            const col = EPOCHS[e.id].colors[0];
+            const isHovered = hoveredEpoch === e.id;
+            return (
+              <div
+                key={e.id}
+                style={{
+                  position: 'absolute',
+                  left: `${x0 * 100}%`, width: `${(x1 - x0) * 100}%`,
+                  top: 0, bottom: 0,
+                  pointerEvents: 'none',   /* base — lets marker events through */
+                  transformStyle: 'preserve-3d',
+                  transform: isHovered ? 'translateZ(40px) scale(1.012)' : 'translateZ(0) scale(1)',
+                  transition: 'transform 360ms cubic-bezier(.22,.85,.25,1), filter 320ms',
+                  filter: hoveredEpoch && !isHovered ? 'brightness(0.7)' : 'brightness(1)',
+                  zIndex: isHovered ? 4 : 1,
+                }}>
+                {/* base fill */}
+                <div style={{
+                  position: 'absolute', inset: 0,
+                  background: isHovered
+                    ? `linear-gradient(180deg, ${col}38 0%, ${col}18 100%)`
+                    : `linear-gradient(180deg, ${col}1f 0%, ${col}0e 100%)`,
+                  transition: 'background 280ms',
+                  boxShadow: isHovered
+                    ? `inset 0 0 0 1px ${col}66, 0 18px 60px ${col}55, 0 6px 22px rgba(0,0,0,0.55)`
+                    : 'inset 0 0 0 1px rgba(245,243,237,0.05)',
+                  borderRadius: 4,
+                  pointerEvents: 'none',
+                }} />
+                {/* left dividing line */}
+                {i > 0 && !isHovered && (
+                  <div style={{
+                    position: 'absolute',
+                    left: 0, top: 0, bottom: 0, width: 1,
+                    background: 'rgba(245,243,237,0.10)',
+                    pointerEvents: 'none',
+                  }} />
+                )}
+                {/* HOT-ZONE: a narrow strip up top is what catches the
+                    hover. Below it markers can still be hovered. */}
+                <div
+                  onMouseEnter={() => setHoveredEpoch(e.id)}
+                  onMouseLeave={() => setHoveredEpoch(null)}
+                  style={{
+                    position: 'absolute',
+                    left: 0, right: 0, top: 0,
+                    height: isHovered ? 30 : 20,
+                    cursor: 'help',
+                    pointerEvents: 'auto',
+                  }} />
+                {/* caption */}
+                <div style={{
+                  position: 'absolute',
+                  left: 0, right: 0,
+                  top: isHovered ? 5 : 7,
+                  paddingLeft: 10, paddingRight: 10,
+                  fontFamily: '"JetBrains Mono", monospace',
+                  fontSize: isHovered ? 11 : 9,
+                  letterSpacing: 2, textTransform: 'uppercase',
+                  color: isHovered ? '#fff' : col,
+                  opacity: isHovered ? 1 : 0.7,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  textShadow: isHovered ? `0 0 14px ${col}, 0 0 4px ${col}` : 'none',
+                  transition: 'all 280ms',
+                  pointerEvents: 'none',
+                  zIndex: 1,
+                }}>
+                  {EPOCHS[e.id].ru}
+                  {isHovered && (
+                    <span style={{
+                      marginLeft: 10, opacity: 0.75,
+                      fontSize: 10, letterSpacing: 1.4,
+                    }}>· {tlFmtYear(e.y0)} → {tlFmtYear(e.y1)}</span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Lanes (ordered + draggable) */}
+        {order.map((id) => renderLane(TL_LANE_BY_ID[id])).filter(Boolean)}
+
+        {/* Hover guide — vertical scrubber line aligning the focused event
+            with every other lane. */}
+        {hoverInfo && (
+          <div style={{
+            position: 'absolute', inset: 0, pointerEvents: 'none',
+            marginLeft: 160,
+            zIndex: 10,
+            overflow: 'visible',
+          }}>
+            <div style={{
+              position: 'absolute',
+              left: `${hoverInfo.x * 100}%`,
+              top: 0, bottom: 36, // stop before the ruler
+              width: 1,
+              background: `linear-gradient(180deg, ${hoverInfo.color}00 0%, ${hoverInfo.color}cc 6%, ${hoverInfo.color}cc 94%, ${hoverInfo.color}00 100%)`,
+              boxShadow: `0 0 12px ${hoverInfo.color}, 0 0 3px ${hoverInfo.color}`,
+            }} />
+            {/* tick & year badge at the top */}
+            <div style={{
+              position: 'absolute',
+              left: `${hoverInfo.x * 100}%`,
+              top: 0,
+              transform: hoverInfo.x > 0.92
+                ? 'translate(-100%, -50%)'
+                : hoverInfo.x < 0.08
+                  ? 'translate(0, -50%)'
+                  : 'translate(-50%, -50%)',
+              padding: '4px 10px',
+              background: hoverInfo.color, color: '#04040a',
+              fontFamily: '"JetBrains Mono", monospace',
+              fontSize: 11, fontWeight: 700, letterSpacing: 1,
+              borderRadius: 999,
+              whiteSpace: 'nowrap',
+              boxShadow: `0 6px 18px ${hoverInfo.color}55, 0 0 0 2px rgba(4,4,10,0.85)`,
+            }}>
+              {hoverInfo.range
+                ? `${tlFmtYear(hoverInfo.range[0])} – ${hoverInfo.range[1] >= TL_NOW ? 'сейчас' : tlFmtYear(hoverInfo.range[1])}`
+                : tlFmtYear(hoverInfo.year)}
+            </div>
+          </div>
+        )}
+
+        {/* Ruler */}
+        <div style={{
+          position: 'relative',
+          height: 36,
+          borderTop: '1px solid rgba(245,243,237,0.12)',
+          display: 'flex',
+        }}>
+          <div style={{ flex: '0 0 160px' }} />
+          <div style={{ position: 'relative', flex: 1 }}>
+            {tlTicks.map((y, i) => {
+              const x = tlYearToFrac(y);
+              return (
+                <div key={i} style={{
+                  position: 'absolute', left: `${x * 100}%`, top: 0,
+                  transform: 'translateX(-50%)',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center',
+                  gap: 4,
+                }}>
+                  <div style={{
+                    width: 1, height: 8,
+                    background: 'rgba(245,243,237,0.3)',
+                  }} />
+                  <div style={{
+                    fontFamily: '"JetBrains Mono", monospace',
+                    fontSize: 9, letterSpacing: 1,
+                    color: y === TL_NOW ? accent : 'rgba(245,243,237,0.55)',
+                    fontWeight: y === TL_NOW ? 600 : 400,
+                  }}>{tlFmtYear(y)}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Legend / hint */}
+      <div style={{
+        position: 'relative', zIndex: 4,
+        margin: '28px 60px 0',
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        gap: 24,
+        fontFamily: '"DM Sans", sans-serif',
+        fontSize: 12, color: 'rgba(245,243,237,0.5)',
+      }}>
+        <div style={{ display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <span style={{
+              width: 10, height: 10, borderRadius: '50%',
+              background: accent, boxShadow: `0 0 8px ${accent}`,
+            }} />
+            выбрано на грани · цвет полосы
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <span style={{
+              width: 10, height: 10, borderRadius: '50%', background: TL_GRAY,
+            }} />
+            база (не выбрано)
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+            <span style={{
+              fontFamily: '"JetBrains Mono", monospace', fontSize: 12,
+              color: 'rgba(245,243,237,0.6)',
+            }}>⋮⋮</span>
+            тяни за уголок, чтобы переставить полосу
+          </span>
+        </div>
+        <div style={{
+          fontStyle: 'italic',
+          color: 'rgba(245,243,237,0.4)',
+        }}>
+          шкала нелинейная — последние 200 лет растянуты
+        </div>
+      </div>
+    </div>
+  );
+}
+
+Object.assign(window, { UnfoldedTimeline });
+
+</script>
+
+<script type="text/babel">
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "epoch": "contemporary",
+  "ready": [],
+  "unfolded": false,
+  "laneOrder": [
+    "ideas",
+    "inventions",
+    "art",
+    "you",
+    "contemporaries",
+    "places"
+  ],
+  "ty": {
+    "birth": {
+      "y": 1994,
+      "m": 5,
+      "d": 16
+    },
+    "place": "",
+    "lifespan": 84,
+    "events": [
+      {
+        "label": "школа",
+        "year": 2002
+      },
+      {
+        "label": "выпуск",
+        "year": 2011
+      },
+      {
+        "label": "первая работа",
+        "year": 2016
+      },
+      {
+        "label": "переезд",
+        "year": 2020
+      }
+    ]
+  },
+  "faceData": {
+    "left": {
+      "categories": [
+        "Живопись",
+        "Музыка",
+        "Литература"
+      ],
+      "count": 9,
+      "anchor": [
+        "Dark Side · Pink Floyd",
+        "«Мастер и Маргарита»"
+      ]
+    }
+  }
+}/*EDITMODE-END*/;
+
+const FACE_LIST = [
+  { id: 'front',  label: 'Ты' },
+  { id: 'top',    label: 'Идеи' },
+  { id: 'right',  label: 'Современники' },
+  { id: 'left',   label: 'Искусство' },
+  { id: 'back',   label: 'Места' },
+  { id: 'bottom', label: 'Изобретения' },
+];
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const ready = new Set(t.ready || []);
+  const toggleReady = (faceId) => {
+    const next = new Set(ready);
+    next.has(faceId) ? next.delete(faceId) : next.add(faceId);
+    setTweak('ready', Array.from(next));
+  };
+  const setReady = (faceId, on) => {
+    const next = new Set(ready);
+    on ? next.add(faceId) : next.delete(faceId);
+    setTweak('ready', Array.from(next));
+  };
+  const faceData = React.useMemo(() => {
+    const stored = t.faceData || {};
+    const merged = {};
+    for (const id of Object.keys(FACE_DEFAULTS)) {
+      merged[id] = { ...FACE_DEFAULTS[id], ...(stored[id] || {}) };
+    }
+    return merged;
+  }, [t.faceData]);
+  const setFaceData = (faceId, next) => {
+    setTweak('faceData', { ...(t.faceData || {}), [faceId]: next });
+  };
+  return (
+    <>
+      <HiFiHero t={t} setTweak={setTweak} toggleReady={toggleReady} setReady={setReady} ty={t.ty} setTy={(v) => setTweak('ty', v)} faceData={faceData} setFaceData={setFaceData} />
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="Готовность граней" />
+        <TweakRow label="Грани">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+            {FACE_LIST.map((f) => {
+              const on = ready.has(f.id);
+              return (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => toggleReady(f.id)}
+                  style={{
+                    appearance: 'none', cursor: 'pointer',
+                    padding: '6px 10px', textAlign: 'left',
+                    background: on ? 'rgba(34, 211, 238, 0.18)' : 'transparent',
+                    border: `1px solid ${on ? '#22d3ee' : 'rgba(255,255,255,0.16)'}`,
+                    borderRadius: 6,
+                    color: on ? '#fff' : 'rgba(255,255,255,0.7)',
+                    fontFamily: 'inherit', fontSize: 12,
+                    display: 'flex', alignItems: 'center', gap: 8,
+                  }}
+                >
+                  <span style={{
+                    width: 8, height: 8, borderRadius: '50%',
+                    background: on ? '#22d3ee' : 'rgba(255,255,255,0.2)',
+                  }} />
+                  {f.label}
+                </button>
+              );
+            })}
+          </div>
+        </TweakRow>
+        <TweakToggle
+          label="Развёрнуть в ленту"
+          hint="куб → горизонтальная линия жизни"
+          value={t.unfolded}
+          onChange={(v) => setTweak('unfolded', v)}
+        />
+        <TweakSection label="Эпоха пользователя" />
+        <TweakSelect
+          label="Активная эпоха"
+          hint="вычисляется из даты рождения; цвет ТЫ-линии и собранных граней"
+          value={t.epoch}
+          options={EPOCH_ORDER.map((id) => ({ value: id, label: EPOCHS[id].ru }))}
+          onChange={(v) => setTweak('epoch', v)}
+        />
+      </TweaksPanel>
+    </>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
